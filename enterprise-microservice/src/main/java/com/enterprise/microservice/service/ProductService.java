@@ -11,6 +11,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -53,7 +55,7 @@ public class ProductService {
         productRepository.save(product);
     }
 
-    public java.util.List<Product> getProductsByCategory(String category) {
+    public List<Product> getProductsByCategory(String category) {
         return productRepository.findByCategoryAndActiveTrue(category);
     }
 }
