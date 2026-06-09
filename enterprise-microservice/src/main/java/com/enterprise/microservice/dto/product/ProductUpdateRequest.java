@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
-public record ProductUpdateRequest(
+public record ProductRequest(
 
         @NotBlank(message = "Product name is required")
         @Size(max = 100)
@@ -15,6 +15,10 @@ public record ProductUpdateRequest(
 
         @Size(max = 500)
         String description,
+
+        @NotBlank(message = "SKU is required")
+        @Size(max = 50)
+        String sku,
 
         @NotBlank(message = "Category is required")
         @Size(max = 50)

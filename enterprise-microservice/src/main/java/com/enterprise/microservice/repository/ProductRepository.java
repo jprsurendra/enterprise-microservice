@@ -16,6 +16,7 @@ import java.util.Optional;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
+    boolean existsBySku(String sku);
 
     Optional<Product> findBySku(String sku);
 
@@ -32,4 +33,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     int deductProductQuantity(@Param("sku") String sku, @Param("quantity") Integer quantity);
 
     long countByCategoryAndActiveTrue(String category);
+
+    @Query("SELECT p FROM Product p WHERE p.category = :category AND p.active = true")
+    Page<Product> findActiveProductsByCategory(String category, Pageable pageable);
 }

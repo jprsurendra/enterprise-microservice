@@ -2,7 +2,7 @@ package com.enterprise.microservice.controller;
 
 import com.enterprise.microservice.dto.auth.JwtResponse;
 import com.enterprise.microservice.dto.auth.LoginRequest;
-import com.enterprise.microservice.security.JwtTokenProvider;
+import com.enterprise.microservice.security.JwtService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
-    private final JwtTokenProvider tokenProvider;
+    private final JwtService tokenProvider;
 
     @PostMapping("/login")
     public ResponseEntity<JwtResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
