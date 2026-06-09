@@ -1,0 +1,70 @@
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Application specific (ADD THESE) ###
+application-local.yml
+application-*.local.yml
+application-dev.yml
+application-uat.yml
+application-prod.yml
+.env
+*.secret
+*.key
+
+### Logs ###
+logs/
+*.log
+*.log.gz
+*.log.zip
+
+### OS files ###
+.DS_Store
+Thumbs.db
+desktop.ini
+
+### Backup files ###
+*.bak
+*.backup
+*.old
+*.orig
+
+### Temporary files ###
+*.tmp
+*.temp
+*.cache
+
+### Test outputs ###
+test-output/
+surefire-reports/
+failsafe-reports/
