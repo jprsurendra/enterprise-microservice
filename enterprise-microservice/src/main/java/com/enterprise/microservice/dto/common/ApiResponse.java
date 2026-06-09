@@ -1,4 +1,4 @@
-package com.enterprise.microservice.dto;
+package com.enterprise.microservice.dto.common;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

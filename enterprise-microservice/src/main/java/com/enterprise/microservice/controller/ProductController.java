@@ -1,6 +1,6 @@
 package com.enterprise.microservice.controller;
 
-import com.enterprise.microservice.dto.ApiResponse;
+import com.enterprise.microservice.dto.common.ApiResponse;
 import com.enterprise.microservice.entity.Product;
 import com.enterprise.microservice.service.ProductService;
 import jakarta.validation.Valid;

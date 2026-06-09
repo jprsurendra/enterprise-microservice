@@ -1,7 +1,6 @@
 package com.enterprise.microservice.exception;
 
-import com.enterprise.microservice.dto.ApiErrorResponse;
-import jakarta.validation.ConstraintViolationException;
+import com.enterprise.microservice.dto.common.ApiErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;

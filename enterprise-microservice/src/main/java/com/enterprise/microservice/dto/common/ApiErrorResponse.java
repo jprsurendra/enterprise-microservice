@@ -1,4 +1,4 @@
-package com.enterprise.microservice.dto;
+package com.enterprise.microservice.dto.common;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
