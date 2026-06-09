@@ -1,7 +1,7 @@
 package com.enterprise.microservice.controller;
 
-import com.enterprise.microservice.dto.JwtResponse;
-import com.enterprise.microservice.dto.LoginRequest;
+import com.enterprise.microservice.dto.auth.JwtResponse;
+import com.enterprise.microservice.dto.auth.LoginRequest;
 import com.enterprise.microservice.security.JwtTokenProvider;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
