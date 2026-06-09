@@ -683,6 +683,6 @@ This project is for enterprise use. All rights reserved.
 
 ## Version History
 
-| Version | Date       | Changes |
-|---------|------------|---------|
-| 1.0.0 | 2026-06-09 | Initial release: JWT auth, RBAC, AOP logging, request tracing, global exception handling, MySQL integration |
+| Version | Date          | Changes |
+|---------|---------------|---------|
+| 1.0.0 | 2026-06-09    | Initial release: JWT auth, RBAC, AOP logging, request tracing, global exception handling, MySQL integration |
