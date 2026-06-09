@@ -38,3 +38,48 @@ This is a production-ready enterprise microservice built with **Spring Boot 3.1.
 ---
 
 ## Project Structure
+
+enterprise-microservice/
+├── src/main/java/com/enterprise/microservice/
+│ ├── EnterpriseMicroserviceApplication.java
+│ ├── config/
+│ │ ├── SecurityConfig.java
+│ │ └── AopConfig.java
+│ ├── security/
+│ │ ├── JwtTokenProvider.java
+│ │ ├── JwtAuthenticationFilter.java
+│ │ ├── CustomUserDetails.java
+│ │ └── CustomUserDetailsService.java
+│ ├── aspect/
+│ │ ├── DetailedLoggingAspect.java
+│ │ └── ProductionLoggingAspect.java
+│ ├── filter/
+│ │ └── RequestTracingFilter.java
+│ ├── controller/
+│ │ ├── AuthController.java
+│ │ ├── ProductController.java
+│ │ └── TestController.java
+│ ├── dto/
+│ │ ├── LoginRequest.java
+│ │ ├── JwtResponse.java
+│ │ ├── ApiErrorResponse.java
+│ │ └── ApiResponse.java
+│ ├── entity/
+│ │ └── Product.java
+│ ├── repository/
+│ │ └── ProductRepository.java
+│ ├── service/
+│ │ └── ProductService.java
+│ ├── exception/
+│ │ ├── ErrorCode.java
+│ │ ├── BusinessException.java
+│ │ └── GlobalExceptionHandler.java
+│ ├── health/
+│ │ └── DatabaseHealthIndicator.java
+│ └── util/
+│ └── MdcUtil.java
+├── src/main/resources/
+│ └── application.yml
+├── pom.xml
+├── .gitignore
+└── README.md
