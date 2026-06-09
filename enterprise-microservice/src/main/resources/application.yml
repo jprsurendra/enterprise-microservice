@@ -1,3 +1,47 @@
 spring:
   application:
     name: enterprise-microservice
+  profiles:
+    active: dev
+  datasource:
+    url: jdbc:mysql://localhost:3306/enterprise_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+    show-sql: true
+  security:
+    jwt:
+      secret: ${JWT_SECRET:mySuperSecretKeyForJWTTokenGenerationAndValidation2025!Secure}
+      expiration-ms: 3600000
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  pattern:
+    console: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg - %X{traceId} - %X{clientIp}%n"
+  level:
+    com.enterprise.microservice: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
