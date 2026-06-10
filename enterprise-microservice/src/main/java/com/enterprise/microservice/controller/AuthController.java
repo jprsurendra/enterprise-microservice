@@ -3,8 +3,11 @@ package com.enterprise.microservice.controller;
 import com.enterprise.microservice.dto.ApiErrorResponse;
 import com.enterprise.microservice.dto.JwtResponse;
 import com.enterprise.microservice.dto.LoginRequest;
+import com.enterprise.microservice.dto.RegisterRequest;
+import com.enterprise.microservice.dto.UserResponse;
 import com.enterprise.microservice.exception.ErrorCode;
 import com.enterprise.microservice.security.JwtTokenProvider;
+import com.enterprise.microservice.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -35,15 +38,46 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
-@Tag(name = "Authentication", description = "JWT login and token management")
+@Tag(name = "Authentication", description = "User registration, login, and JWT token management")
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
-    private final JwtTokenProvider tokenProvider;
+    private final JwtTokenProvider      tokenProvider;
+    private final UserService           userService;
+
+    // -----------------------------------------------------------------------
+    // POST /api/auth/register
+    // -----------------------------------------------------------------------
+
+    @Operation(
+            summary     = "Register a new user",
+            description = "Creates a new user account with ROLE_USER. No authentication required."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "User registered successfully",
+                    content = @Content(schema = @Schema(implementation = UserResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Validation failed",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "422", description = "Username or email already exists",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirements   // Public — no JWT required
+    @PostMapping("/register")
+    public ResponseEntity<UserResponse> register(
+            @Valid @RequestBody RegisterRequest request) {
+
+        UserResponse response = userService.register(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // -----------------------------------------------------------------------
+    // POST /api/auth/login
+    // -----------------------------------------------------------------------
 
     @Operation(
             summary     = "Login and obtain JWT",
-            description = "Authenticate with username + password. Returns a signed JWT valid for the configured expiry period."
+            description = "Authenticate with username and password. Returns a signed JWT. " +
+                    "Use the token in the Authorization header as: Bearer <token>"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Login successful",
@@ -53,10 +87,12 @@ public class AuthController {
             @ApiResponse(responseCode = "403", description = "Account disabled or locked",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
-    @SecurityRequirements   // This endpoint explicitly requires NO auth — overrides global scheme
+    @SecurityRequirements   // Public — no JWT required
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest loginRequest,
-                                   HttpServletRequest httpRequest) {
+    public ResponseEntity<?> login(
+            @Valid @RequestBody LoginRequest loginRequest,
+            HttpServletRequest httpRequest) {
+
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
@@ -64,23 +100,115 @@ public class AuthController {
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
             String jwt = tokenProvider.generateToken(authentication);
+            log.info("Successful login — user: {}", loginRequest.getUsername());
 
-            log.info("Successful login for user: {}", loginRequest.getUsername());
-
-            // expiresIn in SECONDS (JWT spec), not milliseconds
-            return ResponseEntity.ok(new JwtResponse(jwt, "Bearer", tokenProvider.getExpirationInSeconds()));
+            return ResponseEntity.ok(
+                    new JwtResponse(jwt, "Bearer", tokenProvider.getExpirationInSeconds()));
 
         } catch (BadCredentialsException e) {
-            log.warn("Failed login attempt for user: {}", loginRequest.getUsername());
-            ApiErrorResponse error = ApiErrorResponse.of(HttpStatus.UNAUTHORIZED.value(),
-                    ErrorCode.ERR_AUTH_001.getCode(), "Invalid username or password.",
-                    httpRequest.getRequestURI(), MDC.get("traceId"));
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+            log.warn("Failed login attempt — user: {}", loginRequest.getUsername());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
+                    ApiErrorResponse.of(HttpStatus.UNAUTHORIZED.value(),
+                            ErrorCode.ERR_AUTH_001.getCode(),
+                            "Invalid username or password.",
+                            httpRequest.getRequestURI(), MDC.get("traceId")));
+
         } catch (DisabledException | LockedException e) {
-            ApiErrorResponse error = ApiErrorResponse.of(HttpStatus.FORBIDDEN.value(),
-                    ErrorCode.ERR_AUTH_004.getCode(), "Account unavailable. Contact support.",
-                    httpRequest.getRequestURI(), MDC.get("traceId"));
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+                    ApiErrorResponse.of(HttpStatus.FORBIDDEN.value(),
+                            ErrorCode.ERR_AUTH_004.getCode(),
+                            "Account unavailable. Please contact support.",
+                            httpRequest.getRequestURI(), MDC.get("traceId")));
         }
     }
 }
+
+
+
+
+//package com.enterprise.microservice.controller;
+//
+//import com.enterprise.microservice.dto.ApiErrorResponse;
+//import com.enterprise.microservice.dto.JwtResponse;
+//import com.enterprise.microservice.dto.LoginRequest;
+//import com.enterprise.microservice.exception.ErrorCode;
+//import com.enterprise.microservice.security.JwtTokenProvider;
+//import io.swagger.v3.oas.annotations.Operation;
+//import io.swagger.v3.oas.annotations.media.Content;
+//import io.swagger.v3.oas.annotations.media.Schema;
+//import io.swagger.v3.oas.annotations.responses.ApiResponse;
+//import io.swagger.v3.oas.annotations.responses.ApiResponses;
+//import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+//import io.swagger.v3.oas.annotations.tags.Tag;
+//import jakarta.servlet.http.HttpServletRequest;
+//import jakarta.validation.Valid;
+//import lombok.RequiredArgsConstructor;
+//import lombok.extern.slf4j.Slf4j;
+//import org.slf4j.MDC;
+//import org.springframework.http.HttpStatus;
+//import org.springframework.http.ResponseEntity;
+//import org.springframework.security.authentication.AuthenticationManager;
+//import org.springframework.security.authentication.BadCredentialsException;
+//import org.springframework.security.authentication.DisabledException;
+//import org.springframework.security.authentication.LockedException;
+//import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+//import org.springframework.security.core.Authentication;
+//import org.springframework.security.core.context.SecurityContextHolder;
+//import org.springframework.web.bind.annotation.PostMapping;
+//import org.springframework.web.bind.annotation.RequestBody;
+//import org.springframework.web.bind.annotation.RequestMapping;
+//import org.springframework.web.bind.annotation.RestController;
+//
+//@Slf4j
+//@RestController
+//@RequestMapping("/api/auth")
+//@RequiredArgsConstructor
+//@Tag(name = "Authentication", description = "JWT login and token management")
+//public class AuthController {
+//
+//    private final AuthenticationManager authenticationManager;
+//    private final JwtTokenProvider tokenProvider;
+//
+//    @Operation(
+//            summary     = "Login and obtain JWT",
+//            description = "Authenticate with username + password. Returns a signed JWT valid for the configured expiry period."
+//    )
+//    @ApiResponses({
+//            @ApiResponse(responseCode = "200", description = "Login successful",
+//                    content = @Content(schema = @Schema(implementation = JwtResponse.class))),
+//            @ApiResponse(responseCode = "401", description = "Invalid credentials",
+//                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+//            @ApiResponse(responseCode = "403", description = "Account disabled or locked",
+//                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+//    })
+//    @SecurityRequirements   // This endpoint explicitly requires NO auth — overrides global scheme
+//    @PostMapping("/login")
+//    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest loginRequest,
+//                                   HttpServletRequest httpRequest) {
+//        try {
+//            Authentication authentication = authenticationManager.authenticate(
+//                    new UsernamePasswordAuthenticationToken(
+//                            loginRequest.getUsername(), loginRequest.getPassword()));
+//
+//            SecurityContextHolder.getContext().setAuthentication(authentication);
+//            String jwt = tokenProvider.generateToken(authentication);
+//
+//            log.info("Successful login for user: {}", loginRequest.getUsername());
+//
+//            // expiresIn in SECONDS (JWT spec), not milliseconds
+//            return ResponseEntity.ok(new JwtResponse(jwt, "Bearer", tokenProvider.getExpirationInSeconds()));
+//
+//        } catch (BadCredentialsException e) {
+//            log.warn("Failed login attempt for user: {}", loginRequest.getUsername());
+//            ApiErrorResponse error = ApiErrorResponse.of(HttpStatus.UNAUTHORIZED.value(),
+//                    ErrorCode.ERR_AUTH_001.getCode(), "Invalid username or password.",
+//                    httpRequest.getRequestURI(), MDC.get("traceId"));
+//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+//        } catch (DisabledException | LockedException e) {
+//            ApiErrorResponse error = ApiErrorResponse.of(HttpStatus.FORBIDDEN.value(),
+//                    ErrorCode.ERR_AUTH_004.getCode(), "Account unavailable. Contact support.",
+//                    httpRequest.getRequestURI(), MDC.get("traceId"));
+//            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+//        }
+//    }
+//}
