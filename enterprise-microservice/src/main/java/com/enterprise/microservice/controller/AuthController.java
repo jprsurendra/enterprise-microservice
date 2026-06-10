@@ -1,17 +1,28 @@
 package com.enterprise.microservice.controller;
 
+import com.enterprise.microservice.dto.ApiErrorResponse;
 import com.enterprise.microservice.dto.JwtResponse;
 import com.enterprise.microservice.dto.LoginRequest;
+import com.enterprise.microservice.exception.ErrorCode;
 import com.enterprise.microservice.security.JwtTokenProvider;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @Slf4j
 @RestController
@@ -23,19 +34,48 @@ public class AuthController {
     private final JwtTokenProvider tokenProvider;
 
     @PostMapping("/login")
-    public ResponseEntity<JwtResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword())
-        );
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest loginRequest,
+                                   HttpServletRequest httpRequest) {
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            loginRequest.getUsername(), loginRequest.getPassword()));
 
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-        String jwt = tokenProvider.generateToken(authentication);
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            String jwt = tokenProvider.generateToken(authentication);
 
-        return ResponseEntity.ok(new JwtResponse(jwt, "Bearer", 3600000L));
-    }
+            log.info("Successful login for user: {}", loginRequest.getUsername());
 
-    @GetMapping("/test")
-    public String test() {
-        return "Auth endpoint is working!";
+            // expiresIn in SECONDS (JWT spec), not milliseconds
+            return ResponseEntity.ok(new JwtResponse(jwt, "Bearer", tokenProvider.getExpirationInSeconds()));
+
+        } catch (BadCredentialsException e) {
+            log.warn("Failed login attempt for user: {}", loginRequest.getUsername());
+            ApiErrorResponse error = ApiErrorResponse.of(
+                    HttpStatus.UNAUTHORIZED.value(),
+                    ErrorCode.ERR_AUTH_001.getCode(),
+                    "Invalid username or password.",
+                    httpRequest.getRequestURI(),
+                    MDC.get("traceId"));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+
+        } catch (DisabledException e) {
+            ApiErrorResponse error = ApiErrorResponse.of(
+                    HttpStatus.FORBIDDEN.value(),
+                    ErrorCode.ERR_AUTH_004.getCode(),
+                    "Account is disabled. Contact support.",
+                    httpRequest.getRequestURI(),
+                    MDC.get("traceId"));
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+
+        } catch (LockedException e) {
+            ApiErrorResponse error = ApiErrorResponse.of(
+                    HttpStatus.FORBIDDEN.value(),
+                    ErrorCode.ERR_AUTH_004.getCode(),
+                    "Account is locked. Contact support.",
+                    httpRequest.getRequestURI(),
+                    MDC.get("traceId"));
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+        }
     }
 }
