@@ -5,6 +5,13 @@ import com.enterprise.microservice.dto.JwtResponse;
 import com.enterprise.microservice.dto.LoginRequest;
 import com.enterprise.microservice.exception.ErrorCode;
 import com.enterprise.microservice.security.JwtTokenProvider;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -28,11 +35,25 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Tag(name = "Authentication", description = "JWT login and token management")
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
 
+    @Operation(
+            summary     = "Login and obtain JWT",
+            description = "Authenticate with username + password. Returns a signed JWT valid for the configured expiry period."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Login successful",
+                    content = @Content(schema = @Schema(implementation = JwtResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Invalid credentials",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Account disabled or locked",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirements   // This endpoint explicitly requires NO auth — overrides global scheme
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest loginRequest,
                                    HttpServletRequest httpRequest) {
@@ -51,30 +72,14 @@ public class AuthController {
 
         } catch (BadCredentialsException e) {
             log.warn("Failed login attempt for user: {}", loginRequest.getUsername());
-            ApiErrorResponse error = ApiErrorResponse.of(
-                    HttpStatus.UNAUTHORIZED.value(),
-                    ErrorCode.ERR_AUTH_001.getCode(),
-                    "Invalid username or password.",
-                    httpRequest.getRequestURI(),
-                    MDC.get("traceId"));
+            ApiErrorResponse error = ApiErrorResponse.of(HttpStatus.UNAUTHORIZED.value(),
+                    ErrorCode.ERR_AUTH_001.getCode(), "Invalid username or password.",
+                    httpRequest.getRequestURI(), MDC.get("traceId"));
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
-
-        } catch (DisabledException e) {
-            ApiErrorResponse error = ApiErrorResponse.of(
-                    HttpStatus.FORBIDDEN.value(),
-                    ErrorCode.ERR_AUTH_004.getCode(),
-                    "Account is disabled. Contact support.",
-                    httpRequest.getRequestURI(),
-                    MDC.get("traceId"));
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
-
-        } catch (LockedException e) {
-            ApiErrorResponse error = ApiErrorResponse.of(
-                    HttpStatus.FORBIDDEN.value(),
-                    ErrorCode.ERR_AUTH_004.getCode(),
-                    "Account is locked. Contact support.",
-                    httpRequest.getRequestURI(),
-                    MDC.get("traceId"));
+        } catch (DisabledException | LockedException e) {
+            ApiErrorResponse error = ApiErrorResponse.of(HttpStatus.FORBIDDEN.value(),
+                    ErrorCode.ERR_AUTH_004.getCode(), "Account unavailable. Contact support.",
+                    httpRequest.getRequestURI(), MDC.get("traceId"));
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
         }
     }
