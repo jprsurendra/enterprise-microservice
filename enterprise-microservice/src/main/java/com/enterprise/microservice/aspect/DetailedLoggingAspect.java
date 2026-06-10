@@ -1,6 +1,7 @@
 package com.enterprise.microservice.aspect;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -10,55 +11,64 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StopWatch;
 
+/**
+ * DEV/UAT Aspect — verbose logging with full input/output serialization.
+ * Only active under 'dev' or 'uat' profiles.
+ *
+ * Pointcut targets @Service beans only — NOT @RestController.
+ * Controllers are already covered by RequestTracingFilter; intercepting
+ * them here would produce duplicate log entries per request.
+ */
 @Slf4j
 @Aspect
 @Component
-@Profile("dev")
+@Profile({"dev", "uat"})
+@RequiredArgsConstructor
 public class DetailedLoggingAspect {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    // Injected from Spring context — shared, thread-safe singleton
+    private final ObjectMapper objectMapper;
 
-    @Around("@within(org.springframework.stereotype.Service) || @within(org.springframework.web.bind.annotation.RestController)")
+    @Around("@within(org.springframework.stereotype.Service)")
     public Object logMethodExecution(ProceedingJoinPoint joinPoint) throws Throwable {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
-        String className = signature.getDeclaringType().getSimpleName();
+        String className  = signature.getDeclaringType().getSimpleName();
         String methodName = signature.getName();
 
-        StopWatch stopWatch = new StopWatch();
-
-        // Log input parameters
         Object[] args = joinPoint.getArgs();
         if (args != null && args.length > 0) {
             try {
-                String argsJson = objectMapper.writeValueAsString(args);
-                log.info("DEV Mode - Entering: {}.{} with args: {}", className, methodName, argsJson);
+                log.info("[DEV] >>> {}.{}() args={}", className, methodName,
+                        objectMapper.writeValueAsString(args));
             } catch (Exception e) {
-                log.info("DEV Mode - Entering: {}.{} with {} arguments", className, methodName, args.length);
+                log.info("[DEV] >>> {}.{}() args=[{} arg(s) — not serializable]",
+                        className, methodName, args.length);
             }
         } else {
-            log.info("DEV Mode - Entering: {}.{} with no arguments", className, methodName);
+            log.info("[DEV] >>> {}.{}() args=[]", className, methodName);
         }
 
-        stopWatch.start();
-        Object result;
+        StopWatch sw = new StopWatch();
+        sw.start();
         try {
-            result = joinPoint.proceed();
-            stopWatch.stop();
-
-            long executionTime = stopWatch.getTotalTimeMillis();
+            Object result = joinPoint.proceed();
+            sw.stop();
             try {
-                String resultJson = objectMapper.writeValueAsString(result);
-                log.info("DEV Mode - Exiting: {}.{} with result: {} (execution time: {} ms)",
-                        className, methodName, resultJson, executionTime);
+                log.info("[DEV] <<< {}.{}() result={} duration={}ms",
+                        className, methodName,
+                        objectMapper.writeValueAsString(result),
+                        sw.getTotalTimeMillis());
             } catch (Exception e) {
-                log.info("DEV Mode - Exiting: {}.{} (execution time: {} ms)", className, methodName, executionTime);
+                log.info("[DEV] <<< {}.{}() duration={}ms [result not serializable]",
+                        className, methodName, sw.getTotalTimeMillis());
             }
-        } catch (Exception e) {
-            stopWatch.stop();
-            log.error("DEV Mode - Error in {}.{} after {} ms: {}", className, methodName, stopWatch.getTotalTimeMillis(), e.getMessage());
-            throw e;
+            return result;
+        } catch (Throwable t) {
+            sw.stop();
+            log.error("[DEV] !!! {}.{}() threw {} after {}ms — message: {}",
+                    className, methodName, t.getClass().getSimpleName(),
+                    sw.getTotalTimeMillis(), t.getMessage());
+            throw t;
         }
-
-        return result;
     }
 }
