@@ -2,31 +2,39 @@ spring:
   application:
     name: enterprise-microservice
   profiles:
-    active: dev
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   datasource:
-    url: jdbc:mysql://localhost:3306/enterprise_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-    username: root
+    url: ${DB_URL:jdbc:mysql://localhost:3306/enterprise_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 10
-      minimum-idle: 5
+      minimum-idle: 2
       connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: EnterpriseHikariPool
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate          # Never 'update' in any real environment
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQL8Dialect
-        format_sql: true
-    show-sql: true
+        format_sql: false         # Disabled by default; override in dev profile below
+    show-sql: false               # Disabled by default; override in dev profile below
   security:
     jwt:
-      secret: ${JWT_SECRET:mySuperSecretKeyForJWTTokenGenerationAndValidation2025!Secure}
-      expiration-ms: 3600000
+      secret: ${JWT_SECRET}       # No fallback default — must be set explicitly
+      expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+      issuer: enterprise-microservice
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: never        # Never leak Spring's default error messages
+    include-stacktrace: never
+    include-binding-errors: never
 
 management:
   endpoints:
@@ -36,12 +44,54 @@ management:
       base-path: /actuator
   endpoint:
     health:
-      show-details: always
+      show-details: when-authorized   # Not 'always' — requires ROLE_ACTUATOR
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
 
 logging:
   pattern:
-    console: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg - %X{traceId} - %X{clientIp}%n"
+    console: "%d{ISO8601} [%thread] %-5level %logger{36} [traceId=%X{traceId}] [ip=%X{clientIp}] - %msg%n"
+  level:
+    root: WARN
+    com.enterprise.microservice: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN      # Disabled by default
+
+---
+# ===== DEV Profile =====
+spring:
+  config:
+    activate:
+      on-profile: dev
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+    hibernate:
+      ddl-auto: update            # Permissive in local dev only
+
+logging:
   level:
     com.enterprise.microservice: DEBUG
     org.springframework.security: DEBUG
     org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
+
+---
+# ===== PROD Profile =====
+spring:
+  config:
+    activate:
+      on-profile: prod
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+logging:
+  level:
+    com.enterprise.microservice: WARN
+    org.springframework.security: WARN
