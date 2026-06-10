@@ -31,15 +31,45 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
+    /**
+     * Public paths that require no authentication.
+     * Swagger/OpenAPI paths are included here for local dev/uat.
+     * In production, springdoc.swagger-ui.enabled=false and
+     * springdoc.api-docs.enabled=false disable these endpoints entirely,
+     * so no security rule is needed there.
+     */
+    private static final String[] PUBLIC_PATHS = {
+            // Auth
+            "/api/auth/**",
+
+            // Swagger UI static resources
+            "/swagger-ui.html",
+            "/swagger-ui/**",
+
+            // SpringDoc OpenAPI spec endpoints (both /api-docs and /v3/api-docs are active)
+            "/api-docs",
+            "/api-docs/**",
+            "/v3/api-docs",
+            "/v3/api-docs/**",
+
+            // Actuator liveness/readiness probes — must be reachable by load balancers
+            "/actuator/health",
+            "/actuator/health/**"
+    };
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // Stateless API — disable CSRF and sessions
+                // ----------------------------------------------------------------
+                // 1. Stateless API — disable CSRF (no session cookies) and sessions
+                // ----------------------------------------------------------------
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                // Security response headers
+                // ----------------------------------------------------------------
+                // 2. Hardened security response headers
+                // ----------------------------------------------------------------
                 .headers(headers -> headers
                         .frameOptions(frame -> frame.deny())
                         .contentTypeOptions(content -> {})
@@ -49,20 +79,33 @@ public class SecurityConfig {
                         .referrerPolicy(referrer ->
                                 referrer.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
 
-                // Exception handling — 401 vs 403 properly differentiated
+                // ----------------------------------------------------------------
+                // 3. Exception handling
+                //    - authenticationEntryPoint → 401 JSON for missing/invalid JWT
+                //      (without this, Spring returns a 403 for unauthenticated requests)
+                //    - AccessDeniedException (403) is handled by GlobalExceptionHandler
+                // ----------------------------------------------------------------
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint))
 
-                // Endpoint authorization rules
+                // ----------------------------------------------------------------
+                // 4. Endpoint authorization rules
+                // ----------------------------------------------------------------
                 .authorizeHttpRequests(auth -> auth
-                        // Auth endpoints — always public
-                        .requestMatchers("/api/auth/**").permitAll()
-                        // Actuator health probe — public; metrics/info require ADMIN
-                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
-                        .requestMatchers("/actuator/**").hasRole("ADMIN")
-                        // Everything else requires authentication
-                        .anyRequest().authenticated())
+                        // All PUBLIC_PATHS above — no token required
+                        .requestMatchers(PUBLIC_PATHS).permitAll()
 
+                        // Remaining actuator endpoints (/metrics, /info, /env, etc.)
+                        // require ADMIN — only reachable with a valid ROLE_ADMIN JWT
+                        .requestMatchers(HttpMethod.GET, "/actuator/**").hasRole("ADMIN")
+
+                        // Every other request must be authenticated
+                        .anyRequest().authenticated()
+                )
+
+                // ----------------------------------------------------------------
+                // 5. Auth provider + JWT filter
+                // ----------------------------------------------------------------
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
