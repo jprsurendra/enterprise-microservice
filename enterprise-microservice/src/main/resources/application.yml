@@ -1,21 +1,3 @@
-# ===== SpringDoc / Swagger UI =====
-springdoc:
-  api-docs:
-    path: /api-docs              # Raw OpenAPI JSON spec at /api-docs
-    enabled: true
-  swagger-ui:
-    path: /swagger-ui.html       # Swagger UI browser interface
-    enabled: true
-    operations-sorter: method    # Sort endpoints by HTTP method
-    tags-sorter: alpha           # Sort tags alphabetically
-    display-request-duration: true
-    try-it-out-enabled: true     # Enable "Try it out" button by default
-    filter: true                 # Enable search/filter bar
-  show-actuator: false           # Don't pollute docs with actuator endpoints
-  default-produces-media-type: application/json
-  default-consumes-media-type: application/json
-  packages-to-scan: com.enterprise.microservice.controller
-
 spring:
   application:
     name: enterprise-microservice
@@ -35,25 +17,26 @@ spring:
       pool-name: EnterpriseHikariPool
   jpa:
     hibernate:
-      ddl-auto: validate          # Never 'update' in any real environment
+      ddl-auto: validate          # Never 'update' in any real environment (outside local dev)
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQL8Dialect
         format_sql: false         # Disabled by default; override in dev profile below
-    show-sql: false               # Disabled by default; override in dev profile below
+    show-sql: false               # Disabled by default — overridden in dev profile
   security:
     jwt:
-      secret: ${JWT_SECRET}       # No fallback default — must be set explicitly
+      secret: ${JWT_SECRET}       # No fallback default — must be set explicitly  set in .env
       expiration-ms: ${JWT_EXPIRATION_MS:3600000}
       issuer: enterprise-microservice
 
 server:
   port: ${SERVER_PORT:8080}
   error:
-    include-message: never        # Never leak Spring's default error messages
+    include-message: never        # Never leak Spring's internal error messages
     include-stacktrace: never
     include-binding-errors: never
 
+# ===== Spring Boot Actuator =====
 management:
   endpoints:
     web:
@@ -62,13 +45,32 @@ management:
       base-path: /actuator
   endpoint:
     health:
-      show-details: when-authorized   # Not 'always' — requires ROLE_ACTUATOR
+      show-details: when-authorized   # Requires ROLE_ADMIN — not 'always'
       probes:
         enabled: true
   info:
     env:
       enabled: true
 
+# ===== SpringDoc / Swagger UI =====
+springdoc:
+  api-docs:
+    path: /api-docs                   # OpenAPI JSON spec → http://localhost:8080/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html            # Swagger UI → http://localhost:8080/swagger-ui.html
+    enabled: true
+    operations-sorter: method         # Sort endpoints by HTTP method (GET, POST, PUT, DELETE)
+    tags-sorter: alpha                # Sort tags alphabetically
+    display-request-duration: true    # Show response time in Try it out results
+    try-it-out-enabled: true          # "Try it out" button active by default
+    filter: true                      # Show search/filter bar at the top
+  show-actuator: false                # Keep actuator endpoints out of API docs
+  default-produces-media-type: application/json
+  default-consumes-media-type: application/json
+  packages-to-scan: com.enterprise.microservice.controller
+
+# ===== Default Logging =====
 logging:
   pattern:
     console: "%d{ISO8601} [%thread] %-5level %logger{36} [traceId=%X{traceId}] [ip=%X{clientIp}] - %msg%n"
@@ -79,7 +81,9 @@ logging:
     org.hibernate.SQL: WARN      # Disabled by default
 
 ---
-# ===== DEV Profile =====
+# ==============================================================
+# DEV Profile — permissive, verbose, full Swagger enabled
+# ==============================================================
 spring:
   config:
     activate:
@@ -90,17 +94,51 @@ spring:
       hibernate:
         format_sql: true
     hibernate:
-      ddl-auto: update            # Permissive in local dev only
+      ddl-auto: update              # Permissive (Auto-create/alter tables) in local dev only
 
 logging:
   level:
     com.enterprise.microservice: DEBUG
     org.springframework.security: DEBUG
     org.hibernate.SQL: DEBUG
-    org.hibernate.orm.jdbc.bind: TRACE
+    org.hibernate.orm.jdbc.bind: TRACE   # Logs actual SQL bind parameter values
+
+springdoc:
+  swagger-ui:
+    enabled: true
+  api-docs:
+    enabled: true
 
 ---
-# ===== PROD Profile =====
+# ==============================================================
+# UAT Profile — production-like but Swagger still accessible
+# for QA team and integration testing
+# ==============================================================
+spring:
+  config:
+    activate:
+      on-profile: uat
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+logging:
+  level:
+    com.enterprise.microservice: DEBUG   # Verbose for UAT debugging
+    org.springframework.security: INFO
+    org.hibernate.SQL: WARN
+
+springdoc:
+  swagger-ui:
+    enabled: true                        # QA team needs Swagger in UAT
+  api-docs:
+    enabled: true
+
+---
+# ==============================================================
+# PROD Profile — hardened, Swagger fully disabled
+# ==============================================================
 spring:
   config:
     activate:
@@ -113,3 +151,10 @@ logging:
   level:
     com.enterprise.microservice: WARN
     org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+
+springdoc:
+  swagger-ui:
+    enabled: false                       # Swagger UI completely off in production
+  api-docs:
+    enabled: false                       # OpenAPI spec endpoint completely off in production
