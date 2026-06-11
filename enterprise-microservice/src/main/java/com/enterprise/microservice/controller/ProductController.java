@@ -1,5 +1,6 @@
 package com.enterprise.microservice.controller;
 
+import com.enterprise.microservice.annotation.ApiLog;
 import com.enterprise.microservice.dto.ApiErrorResponse;
 import com.enterprise.microservice.dto.ApiResponse;
 import com.enterprise.microservice.dto.ProductDto;
@@ -34,8 +35,10 @@ public class ProductController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Missing or invalid token",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
+
     @GetMapping
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @ApiLog(description = "List all products")
     public ResponseEntity<Page<ProductDto>> getAllProducts(
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
         return ResponseEntity.ok(productService.getAllProducts(pageable));
@@ -64,6 +67,7 @@ public class ProductController {
     })
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
+    @ApiLog(description = "Create product", maskFields = {"password"})
     public ResponseEntity<ProductDto> createProduct(@Valid @RequestBody ProductDto dto) {
         return ResponseEntity.status(HttpStatus.CREATED).body(productService.createProduct(dto));
     }
@@ -90,6 +94,7 @@ public class ProductController {
     })
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
+    @ApiLog(description = "Soft-delete product", logResponseBody = false)
     public ResponseEntity<ApiResponse> deleteProduct(
             @Parameter(description = "Product database ID", example = "1") @PathVariable Long id) {
         productService.softDeleteProduct(id);
