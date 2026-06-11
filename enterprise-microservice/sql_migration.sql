@@ -73,8 +73,8 @@ INSERT IGNORE INTO roles (NAME) VALUES ('ROLE_ADMIN');
     -- Feature 2: Third-Party Integration Logs
     -- ----------------------------------------------------------------
     CREATE TABLE IF NOT EXISTS integration_logs (
-                                                    id                BIGINT        NOT NULL AUTO_INCREMENT,
-                                                    trace_id          VARCHAR(36)   NULL,
+        id                BIGINT        NOT NULL AUTO_INCREMENT,
+        trace_id          VARCHAR(36)   NULL,
         integration_name  VARCHAR(100)  NOT NULL,
         operation         VARCHAR(100)  NOT NULL,
         http_method       VARCHAR(10)   NULL,
@@ -102,8 +102,8 @@ INSERT IGNORE INTO roles (NAME) VALUES ('ROLE_ADMIN');
     ALTER TABLE roles ADD COLUMN IF NOT EXISTS description VARCHAR(255) NULL;
 
     CREATE TABLE IF NOT EXISTS permissions (
-                                               id           BIGINT        NOT NULL AUTO_INCREMENT,
-                                               name         VARCHAR(100)  NOT NULL,
+        id           BIGINT        NOT NULL AUTO_INCREMENT,
+        name         VARCHAR(100)  NOT NULL,
         description  VARCHAR(255)  NULL,
         resource     VARCHAR(100)  NOT NULL,   -- e.g. "PRODUCT", "USER", "ORDER"
         action       VARCHAR(50)   NOT NULL,   -- e.g. "READ", "CREATE", "UPDATE", "DELETE"
@@ -116,9 +116,9 @@ INSERT IGNORE INTO roles (NAME) VALUES ('ROLE_ADMIN');
         );
 
     CREATE TABLE IF NOT EXISTS role_permissions (
-                                                    role_id        BIGINT NOT NULL,
-                                                    permission_id  BIGINT NOT NULL,
-                                                    PRIMARY KEY (role_id, permission_id),
+        role_id        BIGINT NOT NULL,
+        permission_id  BIGINT NOT NULL,
+        PRIMARY KEY (role_id, permission_id),
         CONSTRAINT fk_rp_role       FOREIGN KEY (role_id)       REFERENCES roles       (id) ON DELETE CASCADE,
         CONSTRAINT fk_rp_permission FOREIGN KEY (permission_id) REFERENCES permissions (id) ON DELETE CASCADE
         );
