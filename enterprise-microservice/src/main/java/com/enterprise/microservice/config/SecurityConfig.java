@@ -21,12 +21,36 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 
-@Configuration
-@EnableWebSecurity
-@EnableMethodSecurity(prePostEnabled = true)
+@Configuration       /* <-- It tells Spring: This is a configuration class. It will be loaded at startup.*/
+@EnableWebSecurity   /* <-- Spring Security enables: Without it, there is:  No security, No authentication, No authorization */
+@EnableMethodSecurity(prePostEnabled = true)  /* <-- Now you can use method annotation @PreAuthorize("hasRole('ADMIN')") -->  only the ADMIN user can access it.  */
 @RequiredArgsConstructor
 public class SecurityConfig {
-
+    /*
+    Dependency Injection, Spring will inject these objects at startup.
+    1. UserDetailsService: UserDetailsService userDetailsService
+        Purpose: Retrieving the user from the database.
+        At the time of login, Spring checks:
+            username = surendra,
+            Is it in the database?,
+            Is the password correct?,
+            What are the roles?
+            This is where it is used.
+   2. JwtAuthenticationFilter: JwtAuthenticationFilter jwtAuthenticationFilter
+        This is the most important security component of the project.
+        Request:  GET /api/v1/products
+        Authorization: Bearer eyJhbGciOi...
+        Filter:
+            Reads the token
+            Validates it
+            Extracts the user
+            Stores it in the Security Context
+   3. JwtAuthenticationEntryPoint: JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint
+        When the token is missing or invalid.
+        Example: GET /api/v1/products    Without token
+        Response: { "status":401, "message":"Unauthorized" }
+        This class sends the response.
+     */
     private final UserDetailsService userDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
@@ -38,9 +62,10 @@ public class SecurityConfig {
      * springdoc.api-docs.enabled=false disable these endpoints entirely,
      * so no security rule is needed there.
      */
+    // PUBLIC_PATHS is the whitelist.
     private static final String[] PUBLIC_PATHS = {
             // Auth
-            "/api/auth/**",
+            "/api/auth/**",  // Means Tokens are not required for /api/auth/register   OR  /api/auth/login  OR  /api/auth/refresh
 
             // Swagger UI static resources
             "/swagger-ui.html",
@@ -53,7 +78,7 @@ public class SecurityConfig {
             "/v3/api-docs/**",
 
             // Actuator liveness/readiness probes — must be reachable by load balancers
-            "/actuator/health",
+            "/actuator/health",       // The Load Balancer and Kubernetes hit this very endpoint.
             "/actuator/health/**"
     };
 

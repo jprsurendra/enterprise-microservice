@@ -1,43 +1,54 @@
 spring:
   application:
-    name: enterprise-microservice
+    name: enterprise-microservice           # logical name of Application: It will use in Logs, Monitoring tools, service identification in Microservices environment
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:dev}
-  datasource:
+    active: ${SPRING_PROFILES_ACTIVE:dev}   # if Environment Variable SPRING_PROFILES_ACTIVE not set, then use ==> default profile = dev
+  datasource:    # Database Configuration
     url: ${DB_URL:jdbc:mysql://localhost:3306/enterprise_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:}
+    username: ${DB_USERNAME:root}          # if DB_USERNAME not found then use root as username
+    password: ${DB_PASSWORD:}              # DB_PASSWORD use if found, otherwise empty password
     driver-class-name: com.mysql.cj.jdbc.Driver
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
-      connection-timeout: 30000
+    hikari:                                # Hikari = default connection pool of Spring Boot
+      maximum-pool-size: 10                # limit: 10 DB Connections at a time
+      minimum-idle: 2                      # At least  2 connections will remain ready, so that a DB call can be made as soon as a request arrives.
+      connection-timeout: 30000            # 30-second wait, Exception if the connection is not established.
       idle-timeout: 600000
       max-lifetime: 1800000
       pool-name: EnterpriseHikariPool
-  jpa:
+  jpa:                                     # Hibernate/JPA settings
     hibernate:
-      ddl-auto: validate          # Never 'update' in any real environment (outside local dev)
+      ddl-auto: validate                   # This is an important setting; Never 'update' in any real/Production environment ('validate' means verifying the tables structure & entities without creating or updating it.)
+                                           # Other options: create, create-drop, update, validate, none
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQL8Dialect
         format_sql: false         # Disabled by default; override in dev profile below
-    show-sql: false               # Disabled by default — overridden in dev profile
+    show-sql: false               # Disabled by default, In Production environment SQL hide. Reason: Security, Performance, Clean logs
   security:
     jwt:
-      secret: ${JWT_SECRET}       # No fallback default — must be set explicitly  set in .env
-      expiration-ms: ${JWT_EXPIRATION_MS:3600000}
-      issuer: enterprise-microservice
+      secret: ${JWT_SECRET}       # No fallback default — must be set explicitly  set in .env, Very Important Key for signing the JWT.
+      expiration-ms: ${JWT_EXPIRATION_MS:3600000}   # Token expires after 3600000 ms = 60 minutes = 1 hour
+      issuer: enterprise-microservice               # Which application created the token?
 
-server:
+server:                                     # Server Configuration
   port: ${SERVER_PORT:8080}
   error:
     include-message: never        # Never leak Spring's internal error messages
     include-stacktrace: never
     include-binding-errors: never
+  #    include-message: never & include-stacktrace: never are Excellent production practice.
+  # Bad Response: { "exception":
+  #                  "NullPointerException at UserService line 44"
+  #               }
+  #
+  #  The hacker obtained the internal details.
+  #
+  # Current Setting: { "status":500 }
+  #
+  #  Safe।
 
 # ===== Spring Boot Actuator =====
-management:
+management:                     # Actuator: Application Monitoring; Endpoint: /actuator/health  Response: { "status":"UP" }  Useful for: Kubernetes, Docker, Monitoring tools
   endpoints:
     web:
       exposure:
@@ -53,7 +64,7 @@ management:
       enabled: true
 
 # ===== SpringDoc / Swagger UI =====
-springdoc:
+springdoc:                    # Swagger Configuration
   api-docs:
     path: /api-docs                   # OpenAPI JSON spec → http://localhost:8080/api-docs
     enabled: true
@@ -68,11 +79,11 @@ springdoc:
   show-actuator: false                # Keep actuator endpoints out of API docs
   default-produces-media-type: application/json
   default-consumes-media-type: application/json
-  packages-to-scan: com.enterprise.microservice.controller
+  packages-to-scan: com.enterprise.microservice.controller   # Swagger will only scan controllers.
 
 # ===== Default Logging =====
 logging:
-  pattern:
+  pattern:                         # This defines the log format. traceId: Tracking a single request is difficult. The TraceId allows the entire flow to be tracked.
     console: "%d{ISO8601} [%thread] %-5level %logger{36} [traceId=%X{traceId}] [ip=%X{clientIp}] - %msg%n"
   level:
     root: WARN
@@ -87,7 +98,7 @@ logging:
 spring:
   config:
     activate:
-      on-profile: dev
+      on-profile: dev              # dev: Local Development
   jpa:
     show-sql: true
     properties:
