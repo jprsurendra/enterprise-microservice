@@ -21,8 +21,12 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ApiLog {
+
     String description() default "";
-    boolean logRequestBody  default true;
-    boolean logResponseBody default true;
-    String[] maskFields     default {};   // e.g. {"password", "creditCard"}
+
+    boolean logRequestBody() default true;
+
+    boolean logResponseBody() default true;
+
+    String[] maskFields() default {};
 }
