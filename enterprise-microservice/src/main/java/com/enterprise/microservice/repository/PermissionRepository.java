@@ -20,12 +20,15 @@ public interface PermissionRepository extends JpaRepository<Permission, Long> {
     List<Permission> findByActiveTrue();
 
     /**
-     * Fetch all permissions assigned to a set of role names.
-     * Used by CustomUserDetailsService to build the authority set.
+     * Fetch all active permissions assigned to a given set of role names.
+     *
+     * Navigates FROM Role → permissions (the owning side of the join table).
+     * Permission entity has no 'roles' field — querying p.roles would fail
+     * with UnknownPathException since that attribute does not exist.
      */
     @Query("""
-            SELECT DISTINCT p FROM Permission p
-            JOIN p.roles r
+            SELECT DISTINCT p FROM Role r
+            JOIN r.permissions p
             WHERE r.name IN :roleNames
               AND p.active = true
             """)
