@@ -169,3 +169,26 @@ springdoc:
     enabled: false                       # Swagger UI completely off in production
   api-docs:
     enabled: false                       # OpenAPI spec endpoint completely off in production
+
+---
+# ==============================================================
+# ===== Third-Party Integration =====
+# ==============================================================
+integration:
+  http:
+    connect-timeout-ms: ${INTEGRATION_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms:    ${INTEGRATION_READ_TIMEOUT_MS:30000}
+
+
+---
+# ==============================================================
+# ===== Async Thread Pools =====
+# ==============================================================
+spring:
+  task:
+    execution:
+      pool:
+        core-size: 5
+        max-size: 20
+        queue-capacity: 100
+
