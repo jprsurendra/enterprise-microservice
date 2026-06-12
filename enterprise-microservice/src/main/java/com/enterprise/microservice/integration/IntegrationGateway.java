@@ -18,7 +18,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StopWatch;
+//import org.springframework.util.StopWatch;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
@@ -71,6 +71,55 @@ public class IntegrationGateway {
         int    maxRetries  = request.getMaxRetries() > 0 ? request.getMaxRetries() : 3;
 
         IntegrationResponse response = null;
+        long totalStartMs = System.currentTimeMillis();
+        IntegrationResponse response = null;
+
+        while (retryCount <= maxRetries) {
+            long attemptStart = System.currentTimeMillis();
+            try {
+                response = executeHttp(request, traceId);
+                long attemptMs = System.currentTimeMillis() - attemptStart;
+
+                if (!response.isSuccess() && response.getStatusCode() >= 500
+                        && retryCount < maxRetries) {
+                    log.warn("[{}] {} → {} (attempt {}/{}) — retrying...",
+                            request.getIntegrationName(), request.getOperation(),
+                            response.getStatusCode(), retryCount + 1, maxRetries + 1);
+                    retryCount++;
+                    Thread.sleep(calculateBackoffMs(retryCount));
+                    continue;
+                }
+                break;
+
+            } catch (ResourceAccessException e) {
+                long attemptMs = System.currentTimeMillis() - attemptStart;
+                log.warn("[{}] {} timeout on attempt {}/{}: {}",
+                        request.getIntegrationName(), request.getOperation(),
+                        retryCount + 1, maxRetries + 1, e.getMessage());
+
+                if (retryCount < maxRetries) {
+                    retryCount++;
+                    try { Thread.sleep(calculateBackoffMs(retryCount)); }
+                    catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    continue;
+                }
+                long totalMs = System.currentTimeMillis() - totalStartMs;
+                response = IntegrationResponse.failure(0, "Timeout: " + e.getMessage(),
+                        totalMs, retryCount);
+                break;
+
+            } catch (Exception e) {
+                long totalMs = System.currentTimeMillis() - totalStartMs;
+                log.error("[{}] {} unexpected error: {}",
+                        request.getIntegrationName(), request.getOperation(), e.getMessage());
+                response = IntegrationResponse.failure(0, e.getMessage(), totalMs, retryCount);
+                break;
+            }
+        }
+        /*
+        Fix #6 — Fix StopWatch reuse across retries in IntegrationGateway.call()
+        Why it was wrong: Spring's StopWatch throws IllegalStateException if you call start() when it's already running, and calling start() after stop() on the same instance accumulates total time across all retry attempts rather than measuring per-attempt time.
+
         StopWatch sw = new StopWatch();
 
         while (retryCount <= maxRetries) {
@@ -119,7 +168,7 @@ public class IntegrationGateway {
                 break;
             }
         }
-
+        */
         final int finalRetries = retryCount;
         final IntegrationResponse finalResponse = response;
         persistLogAsync(request, finalResponse, traceId, triggeredBy, finalRetries);
