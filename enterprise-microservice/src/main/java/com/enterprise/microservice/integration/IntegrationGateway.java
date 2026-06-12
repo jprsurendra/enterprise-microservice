@@ -1,4 +1,5 @@
-package com.enterprise.microservice.service;
+package com.enterprise.microservice.integration;
+//package com.enterprise.microservice.service;
 //package com.enterprise.microservice.integration;
 
 import com.enterprise.microservice.entity.IntegrationLogEntity;
