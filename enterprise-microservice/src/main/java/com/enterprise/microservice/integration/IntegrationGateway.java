@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -179,10 +180,8 @@ public class IntegrationGateway {
     // -----------------------------------------------------------------------
     // HTTP Execution
     // -----------------------------------------------------------------------
-
     private IntegrationResponse executeHttp(IntegrationRequest request, String traceId) {
-        StopWatch sw = new StopWatch();
-        sw.start();
+        long startMs = System.currentTimeMillis();
 
         try {
             String serializedBody = request.getBody() != null
@@ -196,7 +195,6 @@ public class IntegrationGateway {
                     .accept(MediaType.APPLICATION_JSON)
                     .header("X-Trace-Id", traceId != null ? traceId : "");
 
-            // Apply caller-supplied headers (auth tokens, API keys, etc.)
             if (request.getHeaders() != null) {
                 for (Map.Entry<String, String> entry : request.getHeaders().entrySet()) {
                     spec.header(entry.getKey(), entry.getValue());
@@ -207,30 +205,97 @@ public class IntegrationGateway {
                 spec.body(serializedBody);
             }
 
-            String responseBody = spec.retrieve().body(String.class);
-            sw.stop();
+            // toEntity() captures the actual HTTP status code (201, 204, etc.)
+            // body(String.class) would return only the body and lose the status
+            ResponseEntity<String> entity = spec.retrieve().toEntity(String.class);
+            long durationMs = System.currentTimeMillis() - startMs;
 
-            return IntegrationResponse.success(200, responseBody, sw.getTotalTimeMillis(), 0);
+            return IntegrationResponse.success(
+                    entity.getStatusCode().value(),
+                    entity.getBody(),
+                    durationMs,
+                    0);
 
         } catch (HttpClientErrorException e) {
-            if (sw.isRunning()) sw.stop();
             // 4xx — not retryable
             return IntegrationResponse.failure(e.getStatusCode().value(),
-                    e.getResponseBodyAsString(), sw.getTotalTimeMillis(), 0);
+                    e.getResponseBodyAsString(),
+                    System.currentTimeMillis() - startMs, 0);
 
         } catch (HttpServerErrorException e) {
-            if (sw.isRunning()) sw.stop();
             // 5xx — retryable (caller decides)
             return IntegrationResponse.failure(e.getStatusCode().value(),
-                    e.getResponseBodyAsString(), sw.getTotalTimeMillis(), 0);
+                    e.getResponseBodyAsString(),
+                    System.currentTimeMillis() - startMs, 0);
 
         } catch (Exception e) {
-            if (sw.isRunning()) sw.stop();
-            // Wrap into RuntimeException so the retry loop in call() can catch it
-            // without requiring executeHttp() to declare throws Exception
             throw new RuntimeException("Integration HTTP call failed: " + e.getMessage(), e);
         }
     }
+
+//  Fix #7 — executeHttp() status code on 2xx success
+//Why it was wrong: RestClient.retrieve().body(String.class) returns only the body — the actual HTTP status (could be 201, 204, etc.) is lost and hardcoded as 200.
+//
+//    private IntegrationResponse executeHttp(IntegrationRequest request, String traceId) {
+//        StopWatch sw = new StopWatch();
+//        sw.start();
+//
+//        try {
+//            String serializedBody = request.getBody() != null
+//                    ? objectMapper.writeValueAsString(request.getBody())
+//                    : null;
+//
+//            RestClient.RequestBodySpec spec = restClient
+//                    .method(HttpMethod.valueOf(request.getHttpMethod().toUpperCase()))
+//                    .uri(request.getUrl())
+//                    .contentType(MediaType.APPLICATION_JSON)
+//                    .accept(MediaType.APPLICATION_JSON)
+//                    .header("X-Trace-Id", traceId != null ? traceId : "");
+//
+//            // Apply caller-supplied headers (auth tokens, API keys, etc.)
+//            if (request.getHeaders() != null) {
+//                for (Map.Entry<String, String> entry : request.getHeaders().entrySet()) {
+//                    spec.header(entry.getKey(), entry.getValue());
+//                }
+//            }
+//
+//            if (serializedBody != null) {
+//                spec.body(serializedBody);
+//            }
+//
+//            /*String responseBody = spec.retrieve().body(String.class);
+//            sw.stop();
+//
+//            return IntegrationResponse.success(200, responseBody, sw.getTotalTimeMillis(), 0);*/
+//            // AFTER — use toEntity() to capture actual status:
+//            ResponseEntity<String> entity = spec.retrieve().toEntity(String.class);
+//            long durationMs = System.currentTimeMillis() - startMs;
+//            return IntegrationResponse.success(
+//                    entity.getStatusCode().value(),
+//                    entity.getBody(),
+//                    durationMs,
+//                    0
+//            );
+//
+//        } catch (HttpClientErrorException e) {
+//            if (sw.isRunning()) sw.stop();
+//            // 4xx — not retryable
+//            return IntegrationResponse.failure(e.getStatusCode().value(),
+//                    e.getResponseBodyAsString(), sw.getTotalTimeMillis(), 0);
+//
+//        } catch (HttpServerErrorException e) {
+//            if (sw.isRunning()) sw.stop();
+//            // 5xx — retryable (caller decides)
+//            return IntegrationResponse.failure(e.getStatusCode().value(),
+//                    e.getResponseBodyAsString(), sw.getTotalTimeMillis(), 0);
+//
+//        } catch (Exception e) {
+//            if (sw.isRunning()) sw.stop();
+//            // Wrap into RuntimeException so the retry loop in call() can catch it
+//            // without requiring executeHttp() to declare throws Exception
+//            throw new RuntimeException("Integration HTTP call failed: " + e.getMessage(), e);
+//        }
+//    }
 
     // -----------------------------------------------------------------------
     // Async DB Logging
