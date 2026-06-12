@@ -71,7 +71,7 @@ public class IntegrationGateway {
         int    retryCount  = 0;
         int    maxRetries  = request.getMaxRetries() > 0 ? request.getMaxRetries() : 3;
 
-        IntegrationResponse response = null;
+//        IntegrationResponse response = null;
         long totalStartMs = System.currentTimeMillis();
         IntegrationResponse response = null;
 
