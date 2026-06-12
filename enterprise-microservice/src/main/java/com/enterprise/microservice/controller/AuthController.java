@@ -1,5 +1,6 @@
 package com.enterprise.microservice.controller;
 
+import com.enterprise.microservice.annotation.ApiLog;
 import com.enterprise.microservice.dto.ApiErrorResponse;
 import com.enterprise.microservice.dto.JwtResponse;
 import com.enterprise.microservice.dto.LoginRequest;
@@ -61,6 +62,12 @@ public class AuthController {
             @ApiResponse(responseCode = "422", description = "Username or email already exists",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
+    @ApiLog(
+            description     = "User Registration",
+            maskFields      = {"password"},   // ← password is NEVER logged
+            logRequestBody  = true,
+            logResponseBody = true
+    )
     @SecurityRequirements   // Public — no JWT required
     @PostMapping("/register")
     public ResponseEntity<UserResponse> register(
@@ -87,6 +94,13 @@ public class AuthController {
             @ApiResponse(responseCode = "403", description = "Account disabled or locked",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
+
+    @ApiLog(
+            description     = "User Login",
+            maskFields      = {"password"},   // ← password masked as "***" in logs
+            logRequestBody  = true,
+            logResponseBody = false   // ← false: JWT token in response should NOT be logged
+    )
     @SecurityRequirements   // Public — no JWT required
     @PostMapping("/login")
     public ResponseEntity<?> login(

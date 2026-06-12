@@ -1,5 +1,6 @@
 package com.enterprise.microservice.controller;
 
+import com.enterprise.microservice.annotation.ApiLog;
 import com.enterprise.microservice.annotation.CheckPermission;
 import com.enterprise.microservice.dto.CreatePermissionRequest;
 import com.enterprise.microservice.dto.CreateRoleRequest;
@@ -54,6 +55,7 @@ public class RoleManagementController {
     // Role endpoints
     // -----------------------------------------------------------------------
 
+    @ApiLog(description = "List All Roles")
     @GetMapping
     @Operation(summary = "List all roles", description = "Returns all roles with their assigned permissions.")
     @ApiResponses({
@@ -69,6 +71,7 @@ public class RoleManagementController {
         );
     }
 
+    @ApiLog(description = "Create Role", logRequestBody = true)
     @PostMapping
     @CheckPermission("ROLE_MANAGE")
     @Operation(summary = "Create a new role",
@@ -88,7 +91,7 @@ public class RoleManagementController {
     // -----------------------------------------------------------------------
     // Permission endpoints
     // -----------------------------------------------------------------------
-
+    @ApiLog(description = "List All Permissions")
     @GetMapping("/permissions")
     @Operation(summary = "List all permissions", description = "Returns all permissions defined in the system.")
     @ApiResponses({
@@ -104,6 +107,7 @@ public class RoleManagementController {
         );
     }
 
+    @ApiLog(description = "Create Permission", logRequestBody = true)
     @PostMapping("/permissions")
     @CheckPermission("ROLE_MANAGE")
     @Operation(summary = "Create a new permission",
@@ -125,7 +129,7 @@ public class RoleManagementController {
     // -----------------------------------------------------------------------
     // Role ↔ Permission assignment
     // -----------------------------------------------------------------------
-
+    @ApiLog(description = "Assign Permissions", logRequestBody = true)
     @PostMapping("/{roleId}/permissions")
     @CheckPermission("ROLE_MANAGE")
     @Operation(summary = "Assign permissions to a role",
