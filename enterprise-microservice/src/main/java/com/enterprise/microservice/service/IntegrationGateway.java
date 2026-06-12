@@ -163,20 +163,22 @@ public class IntegrationGateway {
             return IntegrationResponse.success(200, responseBody, sw.getTotalTimeMillis(), 0);
 
         } catch (HttpClientErrorException e) {
-            sw.stop();
+            if (sw.isRunning()) sw.stop();
             // 4xx — not retryable
             return IntegrationResponse.failure(e.getStatusCode().value(),
                     e.getResponseBodyAsString(), sw.getTotalTimeMillis(), 0);
 
         } catch (HttpServerErrorException e) {
-            sw.stop();
+            if (sw.isRunning()) sw.stop();
             // 5xx — retryable (caller decides)
             return IntegrationResponse.failure(e.getStatusCode().value(),
                     e.getResponseBodyAsString(), sw.getTotalTimeMillis(), 0);
 
         } catch (Exception e) {
-            sw.stop();
-            throw e;  // let the retry loop handle it
+            if (sw.isRunning()) sw.stop();
+            // Wrap into RuntimeException so the retry loop in call() can catch it
+            // without requiring executeHttp() to declare throws Exception
+            throw new RuntimeException("Integration HTTP call failed: " + e.getMessage(), e);
         }
     }
 
