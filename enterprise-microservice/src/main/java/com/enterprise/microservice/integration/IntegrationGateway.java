@@ -220,8 +220,9 @@ public class IntegrationGateway {
 
             integrationLogRepository.save(log);
         } catch (Exception ex) {
-            Slf4j.class.getSimpleName(); // no-op; just log
-            this.log.error("Failed to persist integration log: {}", ex.getMessage());
+//            Slf4j.class.getSimpleName(); // no-op; just log
+//            this.log.error("Failed to persist integration log: {}", ex.getMessage());
+            log.error("Failed to persist integration log: {}", ex.getMessage());
         }
     }
 
