@@ -1,6 +1,7 @@
 package com.enterprise.microservice.controller;
 
 import com.enterprise.microservice.annotation.ApiLog;
+import com.enterprise.microservice.annotation.CheckPermission;
 import com.enterprise.microservice.dto.ApiErrorResponse;
 import com.enterprise.microservice.dto.ApiResponse;
 import com.enterprise.microservice.dto.ProductDto;
@@ -37,7 +38,8 @@ public class ProductController {
     })
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    // @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @CheckPermission("PRODUCT_READ")      // ← dynamic, from DB
     @ApiLog(description = "List all products")
     public ResponseEntity<Page<ProductDto>> getAllProducts(
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
@@ -66,7 +68,7 @@ public class ProductController {
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @CheckPermission("PRODUCT_CREATE") // @PreAuthorize("hasRole('ADMIN')")
     @ApiLog(description = "Create product", maskFields = {"password"})
     public ResponseEntity<ProductDto> createProduct(@Valid @RequestBody ProductDto dto) {
         return ResponseEntity.status(HttpStatus.CREATED).body(productService.createProduct(dto));
@@ -79,7 +81,7 @@ public class ProductController {
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @CheckPermission("PRODUCT_UPDATE") // @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ProductDto> updateProduct(
             @Parameter(description = "Product database ID", example = "1") @PathVariable Long id,
             @Valid @RequestBody ProductDto dto) {
@@ -93,7 +95,7 @@ public class ProductController {
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @CheckPermission("PRODUCT_DELETE") // @PreAuthorize("hasRole('ADMIN')")
     @ApiLog(description = "Soft-delete product", logResponseBody = false)
     public ResponseEntity<ApiResponse> deleteProduct(
             @Parameter(description = "Product database ID", example = "1") @PathVariable Long id) {
