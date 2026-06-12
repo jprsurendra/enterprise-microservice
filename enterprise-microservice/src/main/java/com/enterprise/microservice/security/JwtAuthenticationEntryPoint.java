@@ -15,7 +15,7 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-
+import java.util.UUID;
 /**
  * Invoked when an unauthenticated request reaches a secured endpoint.
  * Returns a structured 401 JSON response — NOT a redirect to a login page.
@@ -34,14 +34,19 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
                          HttpServletResponse response,
                          AuthenticationException authException) throws IOException {
 
-        log.warn("Unauthorized access attempt to [{}]: {}", request.getRequestURI(), authException.getMessage());
+        log.warn("Unauthorized access attempt to [{}]: {}",
+                request.getRequestURI(), authException.getMessage());
+//        String traceId = MDC.get("traceId")
+        String traceId = MDC.get("traceId") != null
+                ? MDC.get("traceId")
+                : UUID.randomUUID().toString();   // fallback — MDC may be empty on error dispatch
 
         ApiErrorResponse errorResponse = ApiErrorResponse.of(
                 HttpStatus.UNAUTHORIZED.value(),
                 ErrorCode.ERR_AUTH_003.getCode(),
                 "Authentication required. Provide a valid Bearer token.",
                 request.getRequestURI(),
-                MDC.get("traceId")
+                traceId
         );
 
         response.setStatus(HttpStatus.UNAUTHORIZED.value());

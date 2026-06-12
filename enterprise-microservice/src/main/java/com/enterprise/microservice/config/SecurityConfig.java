@@ -66,6 +66,7 @@ public class SecurityConfig {
     private static final String[] PUBLIC_PATHS = {
             // Auth
             "/api/auth/**",  // Means Tokens are not required for /api/auth/register   OR  /api/auth/login  OR  /api/auth/refresh
+            "/api/v1/ping",          // ← Public url
 
             // Swagger UI static resources
             "/swagger-ui.html",

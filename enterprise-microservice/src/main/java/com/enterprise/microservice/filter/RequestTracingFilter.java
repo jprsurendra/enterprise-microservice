@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Component
-@Order(1)
+@Order(1)  // Must be LOWER number than Spring Security filter (which is Order(2+))
 public class RequestTracingFilter extends OncePerRequestFilter {
 
     private static final String MDC_TRACE_ID   = "traceId";
