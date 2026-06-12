@@ -30,7 +30,20 @@ spring:
       expiration-ms: ${JWT_EXPIRATION_MS:3600000}   # Token expires after 3600000 ms = 60 minutes = 1 hour
       issuer: enterprise-microservice               # Which application created the token?
 
-server:                                     # Server Configuration
+  # ==============================================================
+  # ===== Async Thread Pools =====
+  # ==============================================================
+  # ===== Async Thread Pools =====          ← CORRECT: nested under spring:
+  task:
+    execution:
+      pool:
+        core-size: 5
+        max-size: 20
+        queue-capacity: 100
+        keep-alive: 60s
+      thread-name-prefix: async-
+
+server: # Server Configuration
   port: ${SERVER_PORT:8080}
   error:
     include-message: never        # Never leak Spring's internal error messages
@@ -79,7 +92,16 @@ springdoc:                    # Swagger Configuration
   show-actuator: false                # Keep actuator endpoints out of API docs
   default-produces-media-type: application/json
   default-consumes-media-type: application/json
-  packages-to-scan: com.enterprise.microservice.controller   # Swagger will only scan controllers.
+  packages-to-scan: com.enterprise.microservice.controller    # Swagger will only scan controllers.
+
+# ==============================================================
+# ===== Third-Party Integration =====
+# ==============================================================
+# ===== Third-Party Integration =====       ← CORRECT: top-level key, no --- before it
+integration:
+  http:
+    connect-timeout-ms: ${INTEGRATION_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms:    ${INTEGRATION_READ_TIMEOUT_MS:30000}
 
 # ===== Default Logging =====
 logging:
@@ -169,26 +191,3 @@ springdoc:
     enabled: false                       # Swagger UI completely off in production
   api-docs:
     enabled: false                       # OpenAPI spec endpoint completely off in production
-
----
-# ==============================================================
-# ===== Third-Party Integration =====
-# ==============================================================
-integration:
-  http:
-    connect-timeout-ms: ${INTEGRATION_CONNECT_TIMEOUT_MS:5000}
-    read-timeout-ms:    ${INTEGRATION_READ_TIMEOUT_MS:30000}
-
-
----
-# ==============================================================
-# ===== Async Thread Pools =====
-# ==============================================================
-spring:
-  task:
-    execution:
-      pool:
-        core-size: 5
-        max-size: 20
-        queue-capacity: 100
-
