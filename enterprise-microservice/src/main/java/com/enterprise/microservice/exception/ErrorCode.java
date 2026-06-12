@@ -18,6 +18,7 @@ public enum ErrorCode {
 
     // Data: These aliases make service code self-documenting:
     ERR_DATA_NOT_FOUND("ERR_DATA_001", "Resource not found"),   // ← ADD if missing
+    ERR_DATA_VALIDATION("ERR_DATA_002", "Input validation failed"),
     ERR_DATA_CONFLICT("ERR_DATA_003", "Resource already exists"), // ← confirm exists
 
     // System
