@@ -1,23 +1,29 @@
 # Enterprise Microservice
 
-## Project Overview
+> **Production-ready Spring Boot enterprise foundation** — JWT authentication, dynamic RBAC,
+> AOP logging, universal HTTP integration gateway, request tracing, async API audit logging,
+> and global exception handling. Built as the base platform for **Raj Sahay** (Government
+> Fintech LSP for Rajasthan MSME vendors).
 
-This is a production-ready enterprise microservice built with **Spring Boot 3.1.5** and **Java 21**, featuring JWT-based authentication, role-based access control (RBAC), AOP logging, request tracing, global exception handling, and MySQL database integration.
+---
 
 ## Table of Contents
 
 - [Technology Stack](#technology-stack)
 - [Project Structure](#project-structure)
-- [File Flow Diagram](#file-flow-diagram)
-- [Complete File Descriptions](#complete-file-descriptions)
-- [Configuration Files](#configuration-files)
-- [File Relationship Summary](#file-relationship-summary)
-- [Request Flow Example](#request-flow-example)
+- [Architecture & Request Flow](#architecture--request-flow)
+- [Feature Overview](#feature-overview)
+- [Database Schema](#database-schema)
 - [Setup Instructions](#setup-instructions)
-- [Testing the Application](#testing-the-application)
 - [Environment Variables](#environment-variables)
+- [API Reference](#api-reference)
 - [Error Codes](#error-codes)
-- [Actuator Endpoints](#actuator-endpoints)
+- [Logging Strategy](#logging-strategy)
+- [Security Design](#security-design)
+- [Architectural Rules](#architectural-rules)
+- [Postman Testing](#postman-testing)
+- [Troubleshooting](#troubleshooting)
+- [Version History](#version-history)
 
 ---
 
@@ -25,15 +31,21 @@ This is a production-ready enterprise microservice built with **Spring Boot 3.1.
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| Java | 21 | Programming language |
-| Spring Boot | 3.1.5 | Framework |
-| Spring Security | 3.1.5 | Authentication & Authorization |
-| Spring Data JPA | 3.1.5 | Database ORM |
-| Spring AOP | 3.1.5 | Aspect-oriented logging |
-| JJWT | 0.12.3 | JWT token management |
-| MySQL | 8.x | Database |
-| Maven | 3.9+ | Build tool |
+| Java | 21 | Programming language (Virtual Threads ready) |
+| Spring Boot | 3.4.1 | Core framework |
+| Spring Security | 6.x | Authentication & authorization (stateless) |
+| Spring Data JPA | 3.4.1 | ORM / database access |
+| Spring AOP | 3.4.1 | Profile-based method logging |
+| JJWT | 0.12.6 | JWT token generation & validation |
+| MySQL | 8.x | Primary database |
+| Resilience4j | 2.2.0 | Retry & circuit breaker (IntegrationGateway) |
+| SpringDoc OpenAPI | 2.7.0 | Swagger UI & API documentation |
+| Apache HttpClient | 5.x | HTTP backend for RestClient |
+| spring-dotenv | 4.0.0 | `.env` file support for local dev |
 | Lombok | Latest | Boilerplate reduction |
+| Maven | 3.9+ | Build tool |
+
+**Profiles:** `dev` | `uat` | `prod`
 
 ---
 
@@ -43,388 +55,388 @@ This is a production-ready enterprise microservice built with **Spring Boot 3.1.
 enterprise-microservice/
 ├── src/main/java/com/enterprise/microservice/
 │   ├── EnterpriseMicroserviceApplication.java
-│   ├── config/
-│   │   ├── SecurityConfig.java
-│   │   └── AopConfig.java
-│   ├── security/
-│   │   ├── JwtTokenProvider.java
-│   │   ├── JwtAuthenticationFilter.java
-│   │   ├── CustomUserDetails.java
-│   │   └── CustomUserDetailsService.java
+│   ├── annotation/
+│   │   ├── ApiLog.java                    # Marks controller methods for DB audit logging
+│   │   └── CheckPermission.java           # Marks methods requiring a specific permission
 │   ├── aspect/
-│   │   ├── DetailedLoggingAspect.java
-│   │   └── ProductionLoggingAspect.java
-│   ├── filter/
-│   │   └── RequestTracingFilter.java
+│   │   ├── ApiLogAspect.java              # Intercepts @ApiLog — persists to api_logs table
+│   │   ├── DetailedLoggingAspect.java     # dev/uat: full input/output/timing per method
+│   │   ├── ProductionLoggingAspect.java   # prod: silent <500ms, warn 500-2000ms, error >2000ms
+│   │   └── DynamicPermissionAspect.java   # Intercepts @CheckPermission — queries DB for RBAC
+│   ├── config/
+│   │   ├── SecurityConfig.java            # Spring Security DSL — stateless, JWT, public paths
+│   │   ├── OpenApiConfig.java             # Swagger/OpenAPI — JWT Bearer scheme, server URL
+│   │   ├── AsyncConfig.java               # Thread pools: apiLogExecutor, integrationExecutor
+│   │   └── RestClientConfig.java          # RestClient bean with Apache HttpClient 5 backend
 │   ├── controller/
-│   │   ├── AuthController.java
-│   │   ├── ProductController.java
-│   │   └── TestController.java
+│   │   ├── AuthController.java            # POST /api/auth/register, POST /api/auth/login
+│   │   ├── ApiLogController.java          # GET /api/v1/admin/api-logs/** (ADMIN only)
+│   │   ├── RoleManagementController.java  # /api/v1/admin/roles/** (ADMIN only)
+│   │   └── TestController.java            # Diagnostic endpoints (ping, admin info)
 │   ├── dto/
 │   │   ├── LoginRequest.java
+│   │   ├── RegisterRequest.java
 │   │   ├── JwtResponse.java
-│   │   ├── ApiErrorResponse.java
-│   │   └── ApiResponse.java
+│   │   ├── UserResponse.java              # Never contains password field
+│   │   ├── ApiResponse.java
+│   │   ├── ApiErrorResponse.java          # Standardized error envelope
+│   │   ├── CreateRoleRequest.java
+│   │   ├── CreatePermissionRequest.java
+│   │   ├── RoleResponse.java              # DTO — never exposes JPA entity directly
+│   │   ├── PermissionResponse.java        # DTO — never exposes JPA entity directly
+│   │   ├── IntegrationRequest.java        # Input for IntegrationGateway.call()
+│   │   └── IntegrationResponse.java       # Output from IntegrationGateway.call()
 │   ├── entity/
-│   │   └── Product.java
-│   ├── repository/
-│   │   └── ProductRepository.java
-│   ├── service/
-│   │   └── ProductService.java
+│   │   ├── User.java
+│   │   ├── Role.java
+│   │   ├── Permission.java
+│   │   ├── ApiLogEntity.java              # Every HTTP request logged here
+│   │   └── IntegrationLogEntity.java      # Every third-party call logged here
 │   ├── exception/
-│   │   ├── ErrorCode.java
-│   │   ├── BusinessException.java
-│   │   └── GlobalExceptionHandler.java
+│   │   ├── ErrorCode.java                 # Enum of all error codes (ERR_AUTH_*, ERR_DATA_*)
+│   │   ├── BusinessException.java         # Runtime exception with ErrorCode
+│   │   └── GlobalExceptionHandler.java    # @RestControllerAdvice — all exceptions → structured JSON
+│   ├── filter/
+│   │   └── RequestTracingFilter.java      # @Order(1) — traceId, IP, body capture, async DB log
 │   ├── health/
-│   │   └── DatabaseHealthIndicator.java
+│   │   └── DatabaseHealthIndicator.java   # SELECT 1 ping — not count(*). Detail: ADMIN only
+│   ├── integration/
+│   │   └── IntegrationGateway.java        # Universal HTTP wrapper for ALL third-party calls
+│   ├── repository/
+│   │   ├── UserRepository.java
+│   │   ├── RoleRepository.java
+│   │   ├── PermissionRepository.java
+│   │   ├── ApiLogRepository.java
+│   │   └── IntegrationLogRepository.java
+│   ├── security/
+│   │   ├── JwtTokenProvider.java          # Token generation, validation, claims extraction
+│   │   ├── JwtAuthenticationFilter.java   # Per-request Bearer token validation
+│   │   ├── JwtAuthenticationEntryPoint.java # 401 structured JSON (not Spring's default 403)
+│   │   ├── CustomUserDetails.java
+│   │   └── CustomUserDetailsService.java  # JOIN FETCH — avoids N+1 on role load
+│   ├── service/
+│   │   ├── UserService.java               # register, login business logic
+│   │   └── RoleManagementService.java     # CRUD for roles, permissions, user-role assignment
 │   └── util/
 │       └── MdcUtil.java
 ├── src/main/resources/
-│   └── application.yml
+│   └── application.yml                    # Base + dev/uat/prod profile blocks
+├── .env                                   # Local secrets (never committed to git)
 ├── pom.xml
-├── .gitignore
 └── README.md
 ```
 
 ---
 
-## File Flow Diagram
+## Architecture & Request Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              HTTP Request                                   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 1. RequestTracingFilter (filter/)                                           │
-│    - Generates Trace ID                                                     │
-│    - Extracts Client IP from X-Forwarded-For                                │
-│    - Injects into MDC for logging                                           │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. JwtAuthenticationFilter (security/)                                      │
-│    - Extracts JWT from Authorization header                                 │
-│    - Validates token                                                        │
-│    - Sets authentication in SecurityContext                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 3. SecurityConfig (config/)                                                 │
-│    - Determines which endpoints are public vs protected                     │
-│    - Applies @PreAuthorize annotations                                      │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 4. Controller Layer (controller/)                                           │
-│    - Receives request                                                       │
-│    - Validates input (@Valid)                                               │
-│    - Calls Service layer                                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 5. AOP Logging Aspect (aspect/)                                             │
-│    - DEV Profile: Logs all inputs/outputs/execution time                   │
-│    - PROD Profile: Logs only slow methods (>1s)                            │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 6. Service Layer (service/)                                                 │
-│    - Business logic                                                         │
-│    - Transaction management (@Transactional)                               │
-│    - Throws BusinessException on errors                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 7. Repository Layer (repository/)                                           │
-│    - Data access using Spring Data JPA                                     │
-│    - Custom queries (@Query)                                               │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ MySQL Database                                                              │
-│ Table: products                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ On Error: GlobalExceptionHandler (exception/)                               │
-│    - Catches all exceptions                                                 │
-│    - Returns standardized ApiErrorResponse                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                          HTTP Request                                │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  1. RequestTracingFilter  [@Order(1) — runs FIRST on every request]  │
+│     • Accepts incoming X-Trace-Id or generates UUID traceId          │
+│     • Extracts real client IP (X-Forwarded-For → X-Real-IP → remote)│
+│     • Wraps request/response in ContentCaching wrappers              │
+│     • Sets X-Trace-Id on response header                             │
+│     • After chain: captures request+response body, persists to       │
+│       api_logs table ASYNC via apiLogExecutor (zero latency impact)  │
+│     • MDC.clear() in finally — critical for thread pool reuse        │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  2. JwtAuthenticationFilter  [Spring Security filter chain]          │
+│     • Extracts Bearer token from Authorization header                │
+│     • Validates JWT (signature, expiry, issuer)                      │
+│     • Loads user via CustomUserDetailsService (JOIN FETCH — no N+1)  │
+│     • Sets Authentication in SecurityContext                         │
+│     • On failure: clears context → JwtAuthenticationEntryPoint fires │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  3. SecurityConfig  [PUBLIC_PATHS check]                             │
+│     • Public: /api/auth/**, /api/v1/ping, /swagger-ui/**,            │
+│               /v3/api-docs/**, /actuator/health/**                   │
+│     • ADMIN only: /actuator/** (except health)                       │
+│     • All others: valid JWT required                                 │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  4. Controller Layer                                                 │
+│     • Input validated with @Valid                                    │
+│     • Always uses DTOs — never exposes JPA entities                  │
+│     • @CheckPermission on methods requiring fine-grained access      │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  5. DynamicPermissionAspect  [@CheckPermission intercept]            │
+│     • Extracts ROLE_ authorities from SecurityContext                │
+│     • Queries permission table for role's granted permissions        │
+│     • Throws ERR_AUTH_004 if required permission not found           │
+│     • TODO: @Cacheable(60s TTL) to avoid DB hit per request          │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  6. AOP Logging Aspect  [profile-based — @Service pointcut only]     │
+│     • dev/uat: DetailedLoggingAspect — full args, result, timing     │
+│     • prod: ProductionLoggingAspect — silent / warn / error by ms    │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  7. Service Layer  [@Transactional owner]                            │
+│     • All business logic lives here                                  │
+│     • Read operations: @Transactional(readOnly=true)                 │
+│     • Throws BusinessException(ErrorCode) on business rule violation │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  8. Repository Layer  [Spring Data JPA]                              │
+│     • Custom @Query with JOIN FETCH to prevent N+1                   │
+│     • No @Transactional — owned by service layer                     │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  MySQL 8 Database                                                    │
+│  Tables: users, roles, permissions, user_roles, role_permissions,    │
+│          api_logs, integration_logs                                  │
+└──────────────────────────────────────────────────────────────────────┘
+
+  ─ ─ ─ ─ On any exception ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
+┌──────────────────────────────────────────────────────────────────────┐
+│  GlobalExceptionHandler  [@RestControllerAdvice]                     │
+│     • All exceptions → structured ApiErrorResponse JSON              │
+│     • Never leaks stack traces, user existence, or PII               │
+│     • traceId always included from MDC                               │
+└──────────────────────────────────────────────────────────────────────┘
+
+  ─ ─ ─ For third-party calls (OCEN, iFMS, SHPP, etc.) ─ ─ ─ ─ ─ ─ ─
+┌──────────────────────────────────────────────────────────────────────┐
+│  IntegrationGateway  [com.enterprise.microservice.integration]       │
+│     • ALL external HTTP calls go through this single component       │
+│     • Per-call timeout, retry with exponential backoff               │
+│     • 4xx → not retried;  5xx/timeout → retried up to maxRetries     │
+│     • Forwards X-Trace-Id to downstream systems                      │
+│     • Async DB log to integration_logs via integrationExecutor       │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Complete File Descriptions
+## Feature Overview
 
-### 1. Root Package (`com.enterprise.microservice`)
+### Feature 1 — JWT Authentication (Stateless)
 
-| File | Description |
-|------|-------------|
-| `EnterpriseMicroserviceApplication.java` | Main Spring Boot entry point with `@SpringBootApplication` |
+- `POST /api/auth/register` — creates user, assigns `ROLE_USER`, returns `UserResponse` (no password)
+- `POST /api/auth/login` — returns `JwtResponse` with `accessToken`, `tokenType: Bearer`, `expiresIn` (seconds)
+- Token carries: `sub` (userId), `username`, `email`, `roles[]`, `iss`, `iat`, `exp`
+- Issuer claim set and verified — prevents cross-service token reuse
+- Secret validated at startup (≥ 32 bytes) — app fails fast with weak secret
+- Password stored as BCrypt (strength=12) — plain text never persisted
 
-### 2. Config Package (`config/`)
+### Feature 2 — Dynamic Role-Based Access Control
 
-| File | Description |
-|------|-------------|
-| `SecurityConfig.java` | Configures Spring Security: disables CSRF, sets stateless session, defines public endpoints (`/api/auth/**`, `/actuator/**`), configures JWT filter |
-| `AopConfig.java` | Enables AspectJ auto-proxy with `@EnableAspectJAutoProxy` |
+```
+Database-driven RBAC — roles and permissions managed at runtime via API.
+No code change or restart needed to add/revoke permissions.
 
-### 3. Security Package (`security/`)
+Hierarchy:  User → Roles → Permissions
+Convention: Permission name = {RESOURCE}_{ACTION} (e.g. LOAN_READ, ROLE_MANAGE)
+```
 
-| File | Description | Relationships |
-|------|-------------|---------------|
-| `JwtTokenProvider.java` | Core JWT utility: generates tokens, validates, extracts username/claims | Used by: `JwtAuthenticationFilter`, `AuthController` |
-| `JwtAuthenticationFilter.java` | Intercepts every request, extracts JWT from `Authorization: Bearer <token>` header, validates, sets `SecurityContext` | Uses: `JwtTokenProvider`, `CustomUserDetailsService` |
-| `CustomUserDetails.java` | UserDetails implementation: stores user info for Spring Security | Used by: `CustomUserDetailsService` |
-| `CustomUserDetailsService.java` | Loads user by username from in-memory map (demo) | Used by: `SecurityConfig`, `JwtAuthenticationFilter` |
+- `@CheckPermission("PERMISSION_NAME")` annotation on any controller or service method
+- `DynamicPermissionAspect` queries DB and checks at runtime
+- `RoleManagementController` — full CRUD for roles, permissions, and user-role assignment
 
-**Demo User Credentials:**
+### Feature 3 — Universal API Logging (Auto — No Annotation Needed)
 
-| Username | Password | Roles |
-|----------|----------|-------|
-| admin | admin123 | ADMIN, USER |
-| user | admin123 | USER |
+Every HTTP request is automatically captured in `api_logs` table by `RequestTracingFilter`:
 
-### 4. Aspect Package (`aspect/`) - Profile-Based Logging
+| Field | Source |
+|-------|--------|
+| `trace_id` | MDC / UUID generated per request |
+| `username` | SecurityContext after JWT validation |
+| `http_method` | HttpServletRequest |
+| `endpoint` | HttpServletRequest URI |
+| `request_body` | ContentCachingRequestWrapper (masked for `/api/auth/login`) |
+| `response_body` | ContentCachingResponseWrapper (masked for `/api/auth/login`) |
+| `http_status` | HttpServletResponse status |
+| `execution_ms` | System.currentTimeMillis() delta |
+| `client_ip` | X-Forwarded-For → X-Real-IP → remoteAddr |
 
-| File | Profile | Description |
-|------|---------|-------------|
-| `DetailedLoggingAspect.java` | `@Profile("dev")` | UAT/Development: Logs method entry/exit with full parameters, results, and execution time |
-| `ProductionLoggingAspect.java` | `@Profile("prod")` | Production: Logs only slow methods (>100ms warning, >1s error), no parameter logging |
+**Automatically excluded from DB logging** (still appear in app log):
+`/actuator/health`, `/api/v1/ping`, `/favicon.ico`
 
-### 5. Filter Package (`filter/`)
+**Sensitive paths** — body captured as `[MASKED]`:
+`/api/auth/login` (request body contains password; response body contains JWT token)
 
-| File | Description |
-|------|-------------|
-| `RequestTracingFilter.java` | Generates `traceId` (UUID), extracts real client IP from `X-Forwarded-For` header, injects both into SLF4J MDC |
+### Feature 4 — Third-Party Integration Gateway
 
-**Client IP Extraction Logic:**
-1. Check `X-Forwarded-For` header (takes first IP)
-2. Fallback to `X-Real-IP`
-3. Fallback to `Proxy-Client-IP`
-4. Fallback to `request.getRemoteAddr()`
+All external system calls (OCEN, iFMS, SHPP, RajSign, GSTN, etc.) go through `IntegrationGateway`:
 
-### 6. Controller Package (`controller/`)
+```java
+IntegrationResponse response = integrationGateway.call(
+    IntegrationRequest.builder()
+        .integrationName("OCEN")
+        .operation("LOAN_PRODUCT_REGISTER")
+        .httpMethod("POST")
+        .url(ocenConfig.getProductRegisterUrl())
+        .body(payload)
+        .timeoutSeconds(30)
+        .maxRetries(2)
+        .logRequestBody(true)
+        .logResponseBody(true)
+        .build()
+);
+```
 
-| File | Endpoints | Security |
-|------|-----------|----------|
-| `AuthController.java` | `POST /api/auth/login` | Public |
-| | `GET /api/auth/test` | Public |
-| `ProductController.java` | `GET /api/products` | `hasAnyRole('USER', 'ADMIN')` |
-| | `GET /api/products/{id}` | `hasAnyRole('USER', 'ADMIN')` |
-| | `POST /api/products` | `hasRole('ADMIN')` |
-| | `PUT /api/products/{id}` | `hasRole('ADMIN')` |
-| | `DELETE /api/products/{id}` | `hasRole('ADMIN')` |
-| `TestController.java` | `GET /test-env` | Public |
-| | `GET /health-check` | Public |
+- Every call logged to `integration_logs` table asynchronously
+- Exponential backoff: 1s → 2s → 4s (capped 10s)
+- `4xx` responses → not retried (client error, no point retrying)
+- `5xx` / timeout → retried up to `maxRetries`
+- Always returns `IntegrationResponse` — callers never see raw exceptions
+- `X-Trace-Id` forwarded automatically to downstream system
 
-### 7. DTO Package (`dto/`)
+### Feature 5 — Request Tracing
 
-| File | Purpose |
-|------|---------|
-| `LoginRequest.java` | Login payload with `@NotBlank` validation |
-| `JwtResponse.java` | Response containing JWT token, type, expiration |
-| `ApiErrorResponse.java` | Standardized error response: timestamp, statusCode, errorCode, message, path, traceId |
-| `ApiResponse.java` | Generic success/error wrapper for non-exception responses |
+- Every request gets a UUID `traceId` injected into SLF4J MDC
+- Appears in every log line automatically via log pattern `[traceId=%X{traceId}]`
+- `X-Trace-Id` echoed in response header — client-side correlation
+- Accepts upstream `X-Trace-Id` header — end-to-end trace from iFMS/SHPP → RajSahay → OCEN → Bank
 
-**ApiErrorResponse Example:**
+### Feature 6 — Profile-Based AOP Logging
+
+| Profile | Aspect | Behaviour |
+|---------|--------|-----------|
+| `dev`, `uat` | `DetailedLoggingAspect` | Logs all method args, return values, execution time |
+| `prod` | `ProductionLoggingAspect` | Silent <500ms · WARN 500–2000ms · ERROR >2000ms |
+
+Pointcut: `@within(Service)` — never `@RestController` (avoids double logging).
+
+### Feature 7 — Global Exception Handling
+
+| Exception | HTTP Status | ErrorCode |
+|-----------|-------------|-----------|
+| `AccessDeniedException` | 403 | ERR_AUTH_004 |
+| `MethodArgumentNotValidException` | 400 | ERR_DATA_002 |
+| `HttpMessageNotReadableException` | 400 | ERR_DATA_002 |
+| `NoResourceFoundException` | 404 | ERR_DATA_001 |
+| `HttpRequestMethodNotSupportedException` | 405 | ERR_SYS_001 |
+| `BusinessException` | 422 | (from exception) |
+| `Exception` (fallback) | 500 | ERR_SYS_001 |
+
+All errors return:
 ```json
 {
-  "timestamp": "2024-01-15 10:30:00",
-  "statusCode": 404,
-  "errorCode": "ERR_DATA_001",
-  "message": "Product not found with id: 99",
-  "path": "/api/products/99",
-  "traceId": "abc123-def456"
+  "timestamp": "2026-06-12T14:22:41",
+  "statusCode": 401,
+  "errorCode": "ERR_AUTH_003",
+  "message": "Authentication required. Provide a valid Bearer token.",
+  "path": "/api/v1/admin/roles",
+  "traceId": "a1b2c3d4-..."
 }
 ```
 
-### 8. Entity Package (`entity/`)
+### Feature 8 — Async Thread Pools
 
-| File | Table | Fields |
-|------|-------|--------|
-| `Product.java` | products | id, name, sku (unique), description, price, quantity, category, active, createdAt, updatedAt |
+| Pool | Core | Max | Queue | Used For |
+|------|------|-----|-------|----------|
+| `apiLogExecutor` | 2 | 10 | 500 | api_logs persistence |
+| `integrationExecutor` | 3 | 15 | 200 | integration_logs persistence |
 
-### 9. Repository Package (`repository/`)
-
-| File | Key Methods |
-|------|-------------|
-| `ProductRepository.java` | `findBySku()`, `findByCategoryAndActiveTrue()`, `findByPriceBetween()`, custom JPQL query, native SQL query, update query with `@Modifying` |
-
-### 10. Service Package (`service/`)
-
-| File | Methods |
-|------|---------|
-| `ProductService.java` | `getAllProducts()`, `getProductById()`, `createProduct()`, `updateProduct()`, `deleteProduct()` (soft delete), `getProductsByCategory()` |
-
-### 11. Exception Package (`exception/`)
-
-| File | Description |
-|------|-------------|
-| `ErrorCode.java` | Enum of standardized error codes: ERR_AUTH_001 to ERR_SYS_001 |
-| `BusinessException.java` | Custom runtime exception with errorCode field |
-| `GlobalExceptionHandler.java` | `@RestControllerAdvice` handling all exceptions globally |
-
-**Error Code Mapping:**
-
-| Error Code | HTTP Status | When Thrown |
-|------------|-------------|-------------|
-| ERR_AUTH_001 | 401 | Invalid credentials |
-| ERR_AUTH_002 | 401 | JWT expired |
-| ERR_AUTH_003 | 401 | JWT invalid |
-| ERR_AUTH_004 | 403 | Access denied |
-| ERR_DATA_NOT_FOUND | 404 | Product not found |
-| ERR_DATA_VALIDATION | 400 | Validation fails / SKU duplicate |
-| ERR_SYS_001 | 500 | Unexpected error |
-
-### 12. Health Package (`health/`)
-
-| File | Description |
-|------|-------------|
-| `DatabaseHealthIndicator.java` | Custom HealthIndicator for Spring Boot Actuator. Checks database connectivity |
-
-### 13. Util Package (`util/`)
-
-| File | Description |
-|------|-------------|
-| `MdcUtil.java` | Utility class for SLF4J MDC operations |
+Both pools: `waitForTasksToCompleteOnShutdown=true` — no log loss on graceful shutdown.
 
 ---
 
-## Configuration Files
+## Database Schema
 
-### application.yml
+```sql
+-- Core identity tables
+CREATE TABLE users (
+    id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username   VARCHAR(50)  UNIQUE NOT NULL,
+    email      VARCHAR(255) UNIQUE NOT NULL,
+    password   VARCHAR(255) NOT NULL,            -- BCrypt(12)
+    full_name  VARCHAR(255),
+    active     BOOLEAN DEFAULT TRUE,
+    created_at DATETIME,
+    updated_at DATETIME
+);
 
-Location: `src/main/resources/application.yml`
+CREATE TABLE roles (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(50) UNIQUE NOT NULL,      -- e.g. ROLE_ADMIN
+    description VARCHAR(255),
+    created_at  DATETIME
+);
 
-```yaml
-spring:
-  application:
-    name: enterprise-microservice
-  profiles:
-    active: dev
-  datasource:
-    url: jdbc:mysql://localhost:3306/enterprise_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-    username: root
-    password: your_mysql_password_here
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  jpa:
-    hibernate:
-      ddl-auto: update
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MySQL8Dialect
-        format_sql: true
-    show-sql: true
-  security:
-    jwt:
-      secret: mySuperSecretKeyForJWTTokenGenerationAndValidation2025!Secure
-      expiration-ms: 3600000
+CREATE TABLE permissions (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100) UNIQUE NOT NULL,     -- e.g. LOAN_READ
+    description VARCHAR(255),
+    resource    VARCHAR(100),                     -- e.g. LOAN
+    action      VARCHAR(50),                      -- READ|CREATE|UPDATE|DELETE|MANAGE
+    active      BOOLEAN DEFAULT TRUE,
+    created_at  DATETIME
+);
 
-server:
-  port: 8080
+-- Join tables
+CREATE TABLE user_roles       (user_id BIGINT, role_id BIGINT);
+CREATE TABLE role_permissions (role_id BIGINT, permission_id BIGINT);
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,metrics,info
-      base-path: /actuator
-  endpoint:
-    health:
-      show-details: always
+-- Audit tables (append-only in production)
+CREATE TABLE api_logs (
+    id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+    trace_id      VARCHAR(36),
+    username      VARCHAR(100),
+    http_method   VARCHAR(10) NOT NULL,
+    endpoint      VARCHAR(500) NOT NULL,
+    controller_class VARCHAR(255),
+    method_name   VARCHAR(255),
+    request_body  MEDIUMTEXT,
+    response_body MEDIUMTEXT,
+    http_status   INT,
+    execution_ms  BIGINT,
+    client_ip     VARCHAR(50),
+    error_message TEXT,
+    created_at    DATETIME
+);
 
-logging:
-  pattern:
-    console: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg - %X{traceId} - %X{clientIp}%n"
-  level:
-    com.enterprise.microservice: DEBUG
-    org.springframework.security: DEBUG
+CREATE TABLE integration_logs (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    trace_id         VARCHAR(36),
+    integration_name VARCHAR(100),
+    operation        VARCHAR(100),
+    http_method      VARCHAR(10),
+    target_url       VARCHAR(2000),
+    request_payload  MEDIUMTEXT,
+    response_payload MEDIUMTEXT,
+    http_status      INT,
+    execution_ms     BIGINT,
+    success          BOOLEAN,
+    error_message    TEXT,
+    retry_count      INT,
+    triggered_by     VARCHAR(100),
+    created_at       DATETIME
+);
 ```
 
-### pom.xml - Key Dependencies
+**Seeded data (auto-created on `dev` profile):**
 
-| Dependency | Purpose |
-|------------|---------|
-| spring-boot-starter-web | REST APIs |
-| spring-boot-starter-security | Authentication/Authorization |
-| spring-boot-starter-data-jpa | Database ORM |
-| spring-boot-starter-aop | Method-level logging aspects |
-| spring-boot-starter-actuator | Health/metrics endpoints |
-| jjwt | JWT generation/validation |
-| mysql-connector-j | MySQL driver |
-| lombok | Reduces boilerplate code |
-
----
-
-## File Relationship Summary
-
-```
-EnterpriseMicroserviceApplication.java (Main)
-          │
-          ├──► SecurityConfig.java ──► JwtAuthenticationFilter.java
-          │                              │
-          │                              └──► JwtTokenProvider.java
-          │                              └──► CustomUserDetailsService.java
-          │                                      └──► CustomUserDetails.java
-          │
-          ├──► RequestTracingFilter.java (MDC)
-          │
-          ├──► DetailedLoggingAspect.java (dev profile)
-          ├──► ProductionLoggingAspect.java (prod profile)
-          │
-          ├──► AuthController.java ──► JwtTokenProvider.java
-          │
-          ├──► ProductController.java ──► ProductService.java
-          │                                    │
-          │                                    ├──► ProductRepository.java
-          │                                    │         └──► Product.java
-          │                                    │
-          │                                    └──► BusinessException.java
-          │                                              └──► ErrorCode.java
-          │
-          └──► GlobalExceptionHandler.java ──► ApiErrorResponse.java
-```
-
----
-
-## Request Flow Example: Create Product
-
-```
-1. Client sends: POST /api/products
-   Header: Authorization: Bearer <JWT>
-   Body: {"name":"Laptop","sku":"LAP001","price":999.99}
-
-2. RequestTracingFilter adds traceId and clientIp to MDC
-
-3. JwtAuthenticationFilter validates JWT, extracts user "admin" with role "ADMIN"
-
-4. SecurityConfig checks @PreAuthorize("hasRole('ADMIN')") → GRANTED
-
-5. ProductController.createProduct() receives request
-
-6. DetailedLoggingAspect (dev) logs method entry with arguments
-
-7. ProductService.createProduct():
-   - Checks if SKU exists → not found
-   - Saves to database via ProductRepository
-
-8. DetailedLoggingAspect logs exit with result and execution time
-
-9. Response returns 201 Created with product JSON
-
-10. On any error: GlobalExceptionHandler returns ApiErrorResponse
-```
+| Roles | Permissions |
+|-------|-------------|
+| `ROLE_ADMIN` | `PRODUCT_READ`, `PRODUCT_CREATE`, `PRODUCT_UPDATE`, `PRODUCT_DELETE`, `USER_READ`, `USER_MANAGE`, `ROLE_MANAGE` |
+| `ROLE_USER` | `PRODUCT_READ`, `USER_READ` |
 
 ---
 
@@ -432,257 +444,305 @@ EnterpriseMicroserviceApplication.java (Main)
 
 ### Prerequisites
 
-- Java 21 (Oracle JDK or OpenJDK)
-- MySQL 8.x
-- Maven 3.9+ (or use included Maven wrapper)
+- Java 21+
+- MySQL 8.x running locally
+- Maven 3.9+
 
-### Step 1: Clone the Repository
-
-```bash
-git clone https://github.com/jprsurendra/enterprise-microservice.git
-cd enterprise-microservice
-```
-
-### Step 2: Create MySQL Database
+### Step 1 — Create Database
 
 ```sql
-CREATE DATABASE enterprise_db;
+CREATE DATABASE enterprise_db
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
 ```
 
-### Step 3: Update application.yml
+### Step 2 — Seed Admin User
 
-Edit `src/main/resources/application.yml` and update:
+```sql
+-- Password: Admin@123
+INSERT INTO users (username, email, password, full_name, active, created_at, updated_at)
+VALUES (
+  'admin',
+  'admin@enterprise.com',
+  '$2a$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.',
+  'System Administrator', true, NOW(), NOW()
+);
 
-```yaml
-spring:
-  datasource:
-    username: your_mysql_username
-    password: your_mysql_password
-  security:
-    jwt:
-      secret: your_secure_jwt_secret_key_min_32_chars
+-- Assign ROLE_ADMIN (run after app starts and seeds roles)
+INSERT INTO user_roles (user_id, role_id)
+SELECT u.id, r.id FROM users u, roles r
+WHERE u.username = 'admin' AND r.name = 'ROLE_ADMIN';
 ```
 
-### Step 4: Build and Run
+### Step 3 — Create `.env` File
+
+Create `.env` in the project root (never commit this file):
+
+```properties
+SPRING_PROFILES_ACTIVE=dev
+
+# Database
+DB_URL=jdbc:mysql://localhost:3306/enterprise_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+DB_USERNAME=your_mysql_username
+DB_PASSWORD=your_mysql_password
+
+# JWT — minimum 32 characters, no default provided
+JWT_SECRET=your_super_secret_jwt_key_minimum_32_characters_long
+JWT_EXPIRATION_MS=3600000
+
+# Server
+SERVER_PORT=8080
+```
+
+### Step 4 — Build & Run
 
 ```bash
-# Using Maven wrapper
-./mvnw clean compile
-./mvnw spring-boot:run
-
-# Or using system Maven
+# Clean build
 mvn clean compile
+
+# Run with dev profile
 mvn spring-boot:run
+
+# Or run JAR directly
+mvn clean package -DskipTests
+java -jar target/enterprise-microservice-1.0.0.jar
 ```
 
-### Step 5: Verify Application is Running
+### Step 5 — Verify
 
 ```bash
-curl http://localhost:8080/health-check
-# Response: Application is running!
-```
-
----
-
-## Testing the Application
-
-### 1. Login and Get JWT Token
-
-```bash
-curl -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
-```
-
-Response:
-```json
-{
-  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
-  "tokenType": "Bearer",
-  "expiresIn": 3600000
-}
-```
-
-### 2. Get All Products (USER or ADMIN)
-
-```bash
-curl -X GET http://localhost:8080/api/products \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
-### 3. Create Product (ADMIN only)
-
-```bash
-curl -X POST http://localhost:8080/api/products \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Test Laptop",
-    "sku": "LAP001",
-    "description": "High performance laptop",
-    "price": 1299.99,
-    "quantity": 50,
-    "category": "Electronics"
-  }'
-```
-
-### 4. Get Product by ID
-
-```bash
-curl -X GET http://localhost:8080/api/products/1 \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
-### 5. Update Product (ADMIN only)
-
-```bash
-curl -X PUT http://localhost:8080/api/products/1 \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Updated Laptop",
-    "sku": "LAP001",
-    "price": 1199.99,
-    "quantity": 45,
-    "category": "Electronics"
-  }'
-```
-
-### 6. Delete Product (ADMIN only - Soft Delete)
-
-```bash
-curl -X DELETE http://localhost:8080/api/products/1 \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
-### 7. Health Check
-
-```bash
+# Health check (public)
 curl http://localhost:8080/actuator/health
-```
 
-Response:
-```json
-{
-  "status": "UP",
-  "components": {
-    "database": {
-      "status": "UP",
-      "details": {
-        "database": "MySQL",
-        "productCount": 5,
-        "status": "Available"
-      }
-    },
-    "ping": {
-      "status": "UP"
-    }
-  }
-}
-```
+# Ping (public)
+curl http://localhost:8080/api/v1/ping
 
-### 8. Test with Regular User (Limited Access)
-
-```bash
-# Login as regular user
-curl -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"user","password":"admin123"}'
-
-# Try to create product (should fail with 403 Forbidden)
-curl -X POST http://localhost:8080/api/products \
-  -H "Authorization: Bearer USER_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test","sku":"TEST","price":10,"quantity":1,"category":"Test"}'
+# Swagger UI
+open http://localhost:8080/swagger-ui.html
 ```
 
 ---
 
 ## Environment Variables
 
-For production, use environment variables instead of hardcoding in `application.yml`:
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `SPRING_PROFILES_ACTIVE` | Yes | Active profile | `dev` / `uat` / `prod` |
+| `DB_URL` | Yes | JDBC connection string | `jdbc:mysql://localhost:3306/enterprise_db` |
+| `DB_USERNAME` | Yes | Database username | `root` |
+| `DB_PASSWORD` | Yes | Database password | `secret` |
+| `JWT_SECRET` | Yes | JWT signing secret (≥32 chars) | `my_super_secret_key_32_chars_min` |
+| `JWT_EXPIRATION_MS` | No | Token TTL in milliseconds | `3600000` (1 hour) |
+| `SERVER_PORT` | No | HTTP port | `8080` |
+| `INTEGRATION_CONNECT_TIMEOUT_MS` | No | HTTP client connect timeout | `5000` |
+| `INTEGRATION_READ_TIMEOUT_MS` | No | HTTP client read timeout | `30000` |
 
-```bash
-# Database Configuration
-export DB_USERNAME=prod_user
-export DB_PASSWORD=secure_password
-export DB_URL=jdbc:mysql://localhost:3306/enterprise_db?useSSL=true
+> **⚠️ JWT_SECRET has no fallback.** The application will refuse to start if it is missing or shorter than 32 bytes.
 
-# JWT Configuration
-export JWT_SECRET=your_256_bit_secret_key
-export JWT_EXPIRATION_MS=3600000
+---
 
-# Server Configuration
-export SERVER_PORT=8080
-export SPRING_PROFILES_ACTIVE=prod
+## API Reference
+
+### Authentication (Public)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/auth/register` | Register new user |
+| `POST` | `/api/auth/login` | Login — returns JWT |
+
+**Register request:**
+```json
+{
+  "username": "john_doe",
+  "email": "john@example.com",
+  "password": "Secret@123",
+  "fullName": "John Doe"
+}
+```
+Password rules: min 8 chars, requires uppercase + lowercase + digit + special character.
+
+**Login response:**
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 3600
+}
+```
+`expiresIn` is in **seconds** (JWT spec compliant).
+
+---
+
+### Role Management (ADMIN only — `Authorization: Bearer <token>`)
+
+| Method | Endpoint | Permission | Description |
+|--------|----------|------------|-------------|
+| `GET` | `/api/v1/admin/roles` | ROLE_ADMIN | List all roles with permissions |
+| `POST` | `/api/v1/admin/roles` | ROLE_MANAGE | Create new role |
+| `GET` | `/api/v1/admin/roles/permissions` | ROLE_ADMIN | List all permissions |
+| `POST` | `/api/v1/admin/roles/permissions` | ROLE_MANAGE | Create new permission |
+| `POST` | `/api/v1/admin/roles/{roleId}/permissions` | ROLE_MANAGE | Assign permissions to role |
+| `DELETE` | `/api/v1/admin/roles/{roleId}/permissions` | ROLE_MANAGE | Revoke permissions from role |
+| `POST` | `/api/v1/admin/roles/users/{userId}/assign` | ROLE_MANAGE | Assign roles to user |
+| `DELETE` | `/api/v1/admin/roles/users/{userId}/revoke` | ROLE_MANAGE | Revoke roles from user |
+
+---
+
+### API Logs (ADMIN only)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/admin/api-logs` | All logs (paginated) |
+| `GET` | `/api/v1/admin/api-logs/user/{username}` | Logs by username |
+| `GET` | `/api/v1/admin/api-logs/range?from=&to=` | Logs by date-time range |
+| `GET` | `/api/v1/admin/api-logs/{id}` | Single log entry |
+
+---
+
+### Diagnostics
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/api/v1/ping` | Public | Returns `pong` |
+| `GET` | `/api/v1/admin/info` | ROLE_ADMIN | Admin status check |
+| `GET` | `/actuator/health` | Public / ROLE_ADMIN | Basic UP/DOWN or full DB detail |
+| `GET` | `/actuator/metrics` | ROLE_ADMIN | JVM, HTTP metrics |
+
+---
+
+## Error Codes
+
+| Code | HTTP | Meaning |
+|------|------|---------|
+| `ERR_AUTH_001` | 401 | Invalid credentials |
+| `ERR_AUTH_002` | 401 | JWT token expired |
+| `ERR_AUTH_003` | 401 | JWT invalid / malformed / tampered |
+| `ERR_AUTH_004` | 403 | Access denied — insufficient role or permission |
+| `ERR_DATA_001` | 404 | Resource not found |
+| `ERR_DATA_002` | 400 | Validation failed |
+| `ERR_DATA_003` | 422 | Resource conflict (duplicate) |
+| `ERR_SYS_001` | 500 | Unexpected internal error |
+
+---
+
+## Logging Strategy
+
+### Log Pattern
+
+```
+%d{ISO8601} [%thread] %-5level %logger{36} [traceId=%X{traceId}] [ip=%X{clientIp}] - %msg%n
+```
+
+Every log line includes `traceId` and `clientIp` automatically.
+
+### Profile Behaviour
+
+| Profile | SQL Logging | App Level | AOP Logging |
+|---------|------------|-----------|-------------|
+| `dev` | `show-sql: true` | DEBUG | Full args/results |
+| `uat` | `show-sql: false` | INFO | Full args/results |
+| `prod` | `show-sql: false` | WARN | Silent/warn/error by ms |
+
+### What Gets Logged Where
+
+| Layer | Destination | Async? |
+|-------|-------------|--------|
+| Every HTTP request | `api_logs` DB table | ✅ Yes |
+| Every third-party call | `integration_logs` DB table | ✅ Yes |
+| Slow/error methods (prod) | Application log file | ❌ Inline |
+| Request summary line | Application log file | ❌ Inline |
+
+---
+
+## Security Design
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Stateless JWT — no sessions | Horizontal scaling without sticky sessions |
+| BCrypt strength 12 | Industry standard for password hashing |
+| JWT secret ≥ 32 bytes enforced at startup | Fail-fast prevents weak secrets reaching production |
+| Issuer claim set and verified | Prevents token reuse across different services |
+| Generic auth error messages | Never reveals whether a username exists |
+| `@Data` banned on JPA entities | Prevents JPA dirty-checking issues and hash collisions |
+| `@Data` banned on `UserDetails` | Prevents password hash leaking in equals/hashCode |
+| `JwtAuthenticationEntryPoint` | Returns 401 JSON — not Spring's default 403 |
+| Response headers set | X-Frame-Options, HSTS, X-Content-Type-Options, Referrer-Policy |
+| `/api/auth/login` body masked in logs | JWT token in response must never be persisted |
+
+### Security Response Headers
+
+```
+X-Frame-Options: DENY
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+X-Content-Type-Options: nosniff
+Referrer-Policy: no-referrer
 ```
 
 ---
 
-## Actuator Endpoints
+## Architectural Rules
 
-| Endpoint | Description | Default Access |
-|----------|-------------|----------------|
-| `/actuator/health` | Application health (with custom database indicator) | Public |
-| `/actuator/metrics` | Application metrics (memory, CPU, etc.) | Public |
-| `/actuator/info` | Application information | Public |
-| `/actuator/env` | Environment properties | Public |
-| `/actuator/httptrace` | HTTP trace information | Public |
+These 8 rules are enforced across all modules. Never violate them.
+
+1. **Package Consistency** — All DTOs in `.dto`, entities in `.entity`, services in `.service`. `IntegrationGateway` stays in `.integration` (infrastructure, not a business service).
+
+2. **Entity Rules** — Never `@Data` on JPA entities. Always `@Getter @Setter @NoArgsConstructor`. `equals/hashCode` on `id` field only. No `@ToString` with associations.
+
+3. **Transaction Ownership** — `@Transactional` on service layer only. Read operations always use `@Transactional(readOnly = true)`.
+
+4. **Security** — BCrypt strength 12. JWT secret validated at startup. Error messages never reveal user existence or internal details.
+
+5. **Logging** — Never log PII in production. `MDC.clear()` always in finally. AOP pointcut on `@Service` only — never `@RestController`.
+
+6. **DTO Pattern** — Controllers always use DTOs. Never expose JPA entities in API responses. `UserResponse` never contains password.
+
+7. **Async DB Logging** — Logging failures must never affect the main request. All persistence via dedicated thread pools.
+
+8. **Sample Code is Removed** — The `Product` entity, `ProductController`, `ProductService`, `ProductRepository`, and `ProductDto` were temporary scaffolding and have been deleted. Do not re-introduce them.
 
 ---
 
-## Logging
+## Postman Testing
 
-### Development Profile (`dev`)
+A complete Postman collection (`RajSahay_Postman_Collection.json`) is included with:
 
-- Full method input/output logging
-- SQL queries shown
-- DEBUG level for application packages
-- Trace ID and Client IP in all logs
+- 22 happy-path requests
+- 23 error/edge-case requests
+- Auto-save of JWT token after login
+- Built-in test scripts that validate response structure, security headers, and traceId presence
 
-### Production Profile (`prod`)
-
-- Only slow methods logged (>100ms warning, >1s error)
-- No parameter logging
-- WARN level for application packages
-- Trace ID and Client IP in all logs
-
-### Log Format
-
-```
-2024-01-15 10:30:00 [http-nio-8080-exec-1] INFO  c.e.m.controller.ProductController - Request processed - Method: GET, URI: /api/products, Status: 200, Duration: 45 ms, Client IP: 192.168.1.100 - traceId: abc123 - clientIp: 192.168.1.100
-```
+**Import steps:**
+1. Open Postman → Import → select the JSON file
+2. The collection has `baseUrl = http://localhost:8080` pre-configured as a collection variable
+3. Run `01 — Auth → Login ADMIN` first — JWT auto-saves to `{{jwt_token}}`
+4. All subsequent requests use `{{jwt_token}}` automatically
 
 ---
 
 ## Troubleshooting
 
-### Common Issues and Solutions
-
-| Issue | Solution |
-|-------|----------|
-| MySQL Connection Error | Verify MySQL is running: `mysql -u root -p`; Check database exists: `SHOW DATABASES;` |
-| JWT Secret Too Short | Use at least 32 characters for JWT secret |
-| Access Denied (403) | Verify you're using correct JWT token and user has required role |
-| Compilation Errors | Run `./mvnw clean compile` to see specific errors |
-| Port 8080 Already in Use | Change `server.port` in `application.yml` or kill process using port 8080 |
-
----
-
-## Repository
-
-GitHub: https://github.com/jprsurendra/enterprise-microservice.git
-
----
-
-## License
-
-This project is for enterprise use. All rights reserved.
+| Issue | Likely Cause | Solution |
+|-------|-------------|----------|
+| App fails to start — JWT secret error | `JWT_SECRET` missing or < 32 chars | Set a strong secret in `.env` |
+| `401` on public endpoints | Endpoint missing from `PUBLIC_PATHS` | Add to `SecurityConfig.PUBLIC_PATHS` array |
+| `traceId: null` in error response | MDC not set before EntryPoint fires | Add null-safe fallback UUID in `JwtAuthenticationEntryPoint` |
+| No data in `api_logs` table | `RequestTracingFilter` not saving | Verify `@Component` and `@Order(1)` on filter |
+| `LazyInitializationException` | Association loaded outside transaction | Use `JOIN FETCH` or `FetchType.EAGER` for required associations |
+| `403` instead of `401` for no token | `JwtAuthenticationEntryPoint` not wired | Verify `.exceptionHandling(e -> e.authenticationEntryPoint(...))` in SecurityConfig |
+| Port 8080 in use | Another process on port | Change `SERVER_PORT` in `.env` or kill the process |
+| MySQL connection refused | MySQL not running | `sudo systemctl start mysql` |
+| `show-sql` in production logs | Profile not set to prod | Set `SPRING_PROFILES_ACTIVE=prod` in `.env` |
 
 ---
 
 ## Version History
 
-| Version | Date          | Changes |
-|---------|---------------|---------|
-| 1.0.0 | 2026-06-09    | Initial release: JWT auth, RBAC, AOP logging, request tracing, global exception handling, MySQL integration |
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | 2026-06-09 | Initial: JWT auth, RBAC, AOP logging, request tracing, global exception handling, MySQL |
+| 1.1.0 | 2026-06-10 | Added: Dynamic RBAC (`@CheckPermission`), `RoleManagementController`, `ApiLogController`, `IntegrationGateway`, async thread pools, `@ApiLog` AOP |
+| 1.2.0 | 2026-06-11 | Added: `RoleResponse`/`PermissionResponse` DTOs, `CreateRoleRequest`/`CreatePermissionRequest` moved to `.dto`, `@Valid` wired on all request bodies |
+| 1.3.0 | 2026-06-12 | Fixed: `IntegrationGateway` moved to `.integration` package, `StopWatch` replaced with `currentTimeMillis()` in retry loop, `executeHttp()` uses `toEntity()` for real HTTP status, dead code removed from `AuthController` |
+| 1.4.0 | 2026-06-13 | Enhanced: `RequestTracingFilter` upgraded — now captures request/response body via `ContentCachingWrapper` and auto-persists ALL requests to `api_logs` table asynchronously. `@ApiLog` annotation now optional. Sensitive paths auto-masked. |
