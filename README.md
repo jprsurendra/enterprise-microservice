@@ -282,7 +282,7 @@ Every HTTP request is automatically captured in `api_logs` table by `RequestTrac
 
 ### Feature 4 — Third-Party Integration Gateway
 
-All external system calls (OCEN, iFMS, SHPP, RajSign, GSTN, etc.) go through `IntegrationGateway`:
+All external system calls go through `IntegrationGateway`:
 
 ```java
 IntegrationResponse response = integrationGateway.call(
