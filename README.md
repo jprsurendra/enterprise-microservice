@@ -2,8 +2,8 @@
 
 > **Production-ready Spring Boot enterprise foundation** — JWT authentication, dynamic RBAC,
 > AOP logging, universal HTTP integration gateway, request tracing, async API audit logging,
-> and global exception handling. Built as the base platform for **Raj Sahay** (Government
-> Fintech LSP for Rajasthan MSME vendors).
+> and global exception handling. Built as the base platform for **Market Place** (
+> Fintech LSP for MSME vendors).
 
 ---
 
