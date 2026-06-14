@@ -17,6 +17,7 @@ import org.springframework.cache.annotation.CacheEvict;
 
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -151,4 +152,5 @@ public class RoleManagementService {
                 .map(Permission::getName)
                 .collect(Collectors.toSet());
     }
+
 }
