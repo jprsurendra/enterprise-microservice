@@ -3,7 +3,8 @@ package com.enterprise.microservice.aspect;
 import com.enterprise.microservice.annotation.CheckPermission;
 import com.enterprise.microservice.exception.BusinessException;
 import com.enterprise.microservice.exception.ErrorCode;
-import com.enterprise.microservice.repository.PermissionRepository;
+//import com.enterprise.microservice.repository.PermissionRepository;
+import com.enterprise.microservice.service.RoleManagementService;
 import com.enterprise.microservice.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,10 +39,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DynamicPermissionAspect {
 
-    private final PermissionRepository permissionRepository;
+    // private final PermissionRepository permissionRepository; // aspect calls repository directly (no cache):
+    private final RoleManagementService roleManagementService;
 
     @Before("@annotation(checkPermission)")
-    public void checkPermission(JoinPoint joinPoint, CheckPermission checkPermission) {
+    public void checkPermission_db(JoinPoint joinPoint, CheckPermission checkPermission) {
         String requiredPermission = checkPermission.value();
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
@@ -55,12 +57,15 @@ public class DynamicPermissionAspect {
                 .filter(a -> a.startsWith("ROLE_"))
                 .collect(Collectors.toSet());
 
-        // Query DB for all permissions belonging to these roles
-        Set<String> grantedPermissions = permissionRepository
-                .findAllByRoleNames(roleNames)
+        // Query DB for all permissions belonging to these roles,
+        // This fires a DB query EVERY TIME any @CheckPermission method is called
+        /* Set<String> grantedPermissions = permissionRepository
+                .findAllByRoleNames(roleNames)    // aspect calls repository directly (no cache):
                 .stream()
                 .map(p -> p.getName())
-                .collect(Collectors.toSet());
+                .collect(Collectors.toSet()); */
+        // Cache hit after first call — no DB query for 60 seconds
+        Set<String> grantedPermissions = roleManagementService.getPermissionNamesForRoles(roleNames);
 
         if (!grantedPermissions.contains(requiredPermission)) {
             log.warn("Permission denied — user={} required={} granted={}",
@@ -71,4 +76,5 @@ public class DynamicPermissionAspect {
 
         log.debug("Permission granted — user={} permission={}", auth.getName(), requiredPermission);
     }
+
 }

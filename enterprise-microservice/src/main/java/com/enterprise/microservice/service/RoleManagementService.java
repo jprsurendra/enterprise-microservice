@@ -12,6 +12,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
+
 import java.util.List;
 import java.util.Set;
 
@@ -76,7 +79,7 @@ public class RoleManagementService {
     // -----------------------------------------------------------------------
     // Assign / revoke permissions on a role
     // -----------------------------------------------------------------------
-
+    @CacheEvict(value = "permissions", allEntries = true)   // ← evict the cache when permissions change.
     @Transactional
     public Role assignPermissionsToRole(Long roleId, Set<Long> permissionIds) {
         Role role = roleRepository.findById(roleId)
@@ -95,6 +98,7 @@ public class RoleManagementService {
         return updated;
     }
 
+    @CacheEvict(value = "permissions", allEntries = true)   // ← evict the cache when permissions change.
     @Transactional
     public Role revokePermissionsFromRole(Long roleId, Set<Long> permissionIds) {
         Role role = roleRepository.findById(roleId)
@@ -132,5 +136,19 @@ public class RoleManagementService {
         user.getRoles().removeIf(r -> roleIds.contains(r.getId()));
         userRepository.save(user);
         log.info("Revoked roles from user id={}", userId);
+    }
+
+    /**
+     * Returns the set of permission names granted to the given roles.
+     * Cached for 60 seconds — avoids DB hit on every @CheckPermission call.
+     * Cache is evicted when permissions are assigned or revoked from roles.
+     */
+    @Cacheable(value = "permissions", key = "#roleNames.toString()")
+    @Transactional(readOnly = true)
+    public Set<String> getPermissionNamesForRoles(Set<String> roleNames) {
+        return permissionRepository.findAllByRoleNames(roleNames)
+                .stream()
+                .map(Permission::getName)
+                .collect(Collectors.toSet());
     }
 }

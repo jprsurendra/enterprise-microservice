@@ -10,7 +10,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:                                # Hikari = default connection pool of Spring Boot
       maximum-pool-size: 10                # limit: 10 DB Connections at a time
-      minimum-idle: 2                      # At least  2 connections will remain ready, so that a DB call can be made as soon as a request arrives.
+      minimum-idle: 2                      # At least 2 connections will remain ready, so that a DB call can be made as soon as a request arrives.
       connection-timeout: 30000            # 30-second wait, Exception if the connection is not established.
       idle-timeout: 600000
       max-lifetime: 1800000
@@ -26,14 +26,13 @@ spring:
     show-sql: false               # Disabled by default, In Production environment SQL hide. Reason: Security, Performance, Clean logs
   security:
     jwt:
-      secret: ${JWT_SECRET}       # No fallback default — must be set explicitly  set in .env, Very Important Key for signing the JWT.
+      secret: ${JWT_SECRET}       # No fallback default — must be set explicitly set in .env, Very Important Key for signing the JWT.
       expiration-ms: ${JWT_EXPIRATION_MS:3600000}   # Token expires after 3600000 ms = 60 minutes = 1 hour
       issuer: enterprise-microservice               # Which application created the token?
 
   # ==============================================================
   # ===== Async Thread Pools =====
   # ==============================================================
-  # ===== Async Thread Pools =====          ← CORRECT: nested under spring:
   task:
     execution:
       pool:
@@ -42,6 +41,29 @@ spring:
         queue-capacity: 100
         keep-alive: 60s
       thread-name-prefix: async-
+
+  # ==============================================================
+  # ===== Caching =====
+  # ==============================================================
+  # 'simple' = ConcurrentHashMap — zero setup, works out of the box for dev/uat.
+  # In prod profile below, this is overridden to 'redis' for distributed caching
+  # across multiple app instances behind a load balancer.
+  #
+  # What is cached?
+  #   - 'permissions' cache: role → permission name mapping used by
+  #     DynamicPermissionAspect on every @CheckPermission call.
+  #     Without cache: 1 DB query per secured method call.
+  #     With cache: 1 DB query per 60 seconds per role combination.
+  #   TTL and eviction are configured in CacheConfig.java.
+  #   Cache is evicted immediately when permissions are assigned or revoked.
+  cache:
+    type: simple                  # dev/uat: ConcurrentHashMap (no extra infrastructure needed)
+    cache-names:                  # Pre-declare cache names — prevents typo-silent misses
+      - permissions               # Role → permission mapping (TTL: 60s, evicted on role change)
+      - roles                     # Role list cache (TTL: 60s)
+      - vendor_profile            # Future: Vendor profile cache (TTL: 10min)
+      - lender_config             # Future: Lender configuration (TTL: 1hr)
+      - reference_data            # Future: Master/reference data (TTL: 6hr)
 
 server: # Server Configuration
   port: ${SERVER_PORT:8080}
@@ -58,7 +80,7 @@ server: # Server Configuration
   #
   # Current Setting: { "status":500 }
   #
-  #  Safe।
+  #  Safe.
 
 # ===== Spring Boot Actuator =====
 management:                     # Actuator: Application Monitoring; Endpoint: /actuator/health  Response: { "status":"UP" }  Useful for: Kubernetes, Docker, Monitoring tools
@@ -97,7 +119,6 @@ springdoc:                    # Swagger Configuration
 # ==============================================================
 # ===== Third-Party Integration =====
 # ==============================================================
-# ===== Third-Party Integration =====       ← CORRECT: top-level key, no --- before it
 integration:
   http:
     connect-timeout-ms: ${INTEGRATION_CONNECT_TIMEOUT_MS:5000}
@@ -179,6 +200,29 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+
+  # ==============================================================
+  # ===== Redis Cache (PROD only) =====
+  # ==============================================================
+  # Overrides base 'simple' cache → distributed Redis cache.
+  # Required when running multiple app instances behind a load balancer.
+  # With 'simple' (ConcurrentHashMap), each instance has its own cache —
+  # a permission change on Instance A is not evicted on Instance B.
+  # Redis is shared across ALL instances — eviction is immediate everywhere.
+  cache:
+    type: redis                          # Overrides base 'simple' → Redis in prod
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms                    # Max wait for Redis response — fail fast
+      lettuce:
+        pool:
+          max-active: 20                 # Max simultaneous Redis connections
+          max-idle: 10
+          min-idle: 5
+          max-wait: 1000ms               # Max wait for a connection from pool
 
 logging:
   level:
